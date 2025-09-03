@@ -19,8 +19,6 @@ import base64
 from groq import Groq
 import requests
 from PIL import Image
-from diffusers import StableDiffusionPipeline
-import torch
 
 # Load environment variables
 load_dotenv()
@@ -33,7 +31,6 @@ GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
-HF_MODEL = os.getenv("HF_MODEL", "black-forest-labs/FLUX.1-schnell")
 
 # Countries and Currencies data
 COUNTRIES_DATA = {
@@ -324,94 +321,118 @@ You received this email because you're subscribed to our updates.
 """
 
 # ================================
-# HUGGINGFACE IMAGE GENERATOR
+# ALTERNATIVE IMAGE GENERATOR USING EXTERNAL APIs
 # ================================
 
-class HuggingFaceImageGenerator:
-    """Generate images using HuggingFace Stable Diffusion"""
+class ExternalImageGenerator:
+    """Generate images using external APIs (no diffusers dependency)"""
     
     def __init__(self):
-        self.pipe = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model_loaded = False
+        self.hugging_face_token = HUGGING_FACE_TOKEN
         
-    def load_model(self):
-        """Load the Stable Diffusion model"""
-        if self.model_loaded:
-            return True
+    def generate_campaign_image_via_api(self, campaign_description, style="professional"):
+        """Generate campaign image using HuggingFace Inference API"""
+        if not self.hugging_face_token:
+            st.warning("⚠️ HuggingFace token not configured for image generation")
+            return None
             
         try:
-            with st.spinner("🔄 Loading AI image generation model..."):
-                models_to_try = [
-                    "stabilityai/stable-diffusion-2-1",
-                    "runwayml/stable-diffusion-v1-5"
-                ]
-                
-                for model_id in models_to_try:
-                    try:
-                        if self.device == "cuda":
-                            self.pipe = StableDiffusionPipeline.from_pretrained(
-                                model_id,
-                                torch_dtype=torch.float16,
-                                use_auth_token=HUGGING_FACE_TOKEN
-                            ).to(self.device)
-                        else:
-                            self.pipe = StableDiffusionPipeline.from_pretrained(
-                                model_id,
-                                torch_dtype=torch.float32,
-                                use_auth_token=HUGGING_FACE_TOKEN
-                            )
-                        
-                        st.success(f"✅ Loaded model: {model_id}")
-                        self.model_loaded = True
-                        return True
-                        
-                    except Exception as e:
-                        st.warning(f"⚠️ Failed to load {model_id}: {str(e)}")
-                        continue
-                
-                st.error("❌ Failed to load any image generation model")
-                return False
-                
-        except Exception as e:
-            st.error(f"❌ Error loading image model: {str(e)}")
-            return False
-    
-    def generate_campaign_image(self, campaign_description, style="professional"):
-        """Generate campaign image"""
-        if not HUGGING_FACE_TOKEN:
-            st.warning("⚠️ HuggingFace token not configured. Please add HUGGING_FACE_TOKEN to your .env file")
-            return None
-        
-        if not self.load_model():
-            return None
-        
-        try:
+            # Enhanced prompt for marketing
             enhanced_prompt = f"Professional marketing campaign image for {campaign_description}, {style} style, high quality, vibrant colors, modern design, commercial photography, eye-catching, brand advertisement, 4K resolution, clean layout"
-            negative_prompt = "blurry, low quality, distorted, ugly, bad anatomy, extra limbs, text, watermark, signature, amateur"
             
-            with st.spinner("🎨 Generating your campaign image..."):
-                if self.device == "cuda":
-                    image = self.pipe(
-                        prompt=enhanced_prompt,
-                        negative_prompt=negative_prompt,
-                        num_inference_steps=25,
-                        guidance_scale=7.5,
-                        width=512,
-                        height=512
-                    ).images[0]
+            # HuggingFace Inference API endpoint
+            API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+            headers = {"Authorization": f"Bearer {self.hugging_face_token}"}
+            
+            payload = {
+                "inputs": enhanced_prompt,
+                "parameters": {
+                    "num_inference_steps": 20,
+                    "guidance_scale": 7.5,
+                    "width": 512,
+                    "height": 512
+                }
+            }
+            
+            with st.spinner("🎨 Generating your campaign image via API..."):
+                response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
+                
+                if response.status_code == 200:
+                    # Convert response to image
+                    image_bytes = response.content
+                    image = Image.open(io.BytesIO(image_bytes))
+                    
+                    # Store in session state
+                    image_data = {
+                        'prompt': enhanced_prompt,
+                        'timestamp': datetime.now(),
+                        'campaign': campaign_description,
+                        'image': image
+                    }
+                    
+                    st.session_state.generated_images.append(image_data)
+                    
+                    st.success("✨ Campaign image generated successfully!")
+                    st.image(image, caption=f"Generated for: {campaign_description}", use_column_width=True)
+                    
+                    # Provide download option
+                    img_bytes = io.BytesIO()
+                    image.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    st.download_button(
+                        "📥 Download Campaign Image",
+                        data=img_bytes.getvalue(),
+                        file_name=f"campaign_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png"
+                    )
+                    
+                    return image
                 else:
-                    image = self.pipe(
-                        prompt=enhanced_prompt,
-                        negative_prompt=negative_prompt,
-                        num_inference_steps=15,
-                        guidance_scale=7.5,
-                        width=512,
-                        height=512
-                    ).images[0]
+                    st.error(f"❌ Image generation failed: {response.status_code}")
+                    st.info("💡 The model might be loading. Try again in a few minutes.")
+                    return None
+                    
+        except requests.exceptions.Timeout:
+            st.error("⏰ Image generation timed out. Please try again.")
+            return None
+        except Exception as e:
+            st.error(f"❌ Error generating image: {str(e)}")
+            return None
+    
+    def generate_placeholder_image(self, campaign_description):
+        """Generate a placeholder image with campaign text"""
+        try:
+            from PIL import Image, ImageDraw, ImageFont
             
+            # Create a placeholder image
+            width, height = 512, 512
+            image = Image.new('RGB', (width, height), color='#f0f0f0')
+            draw = ImageDraw.Draw(image)
+            
+            # Add campaign text
+            text = f"Campaign Image\n{campaign_description[:50]}..."
+            
+            try:
+                # Try to use a nice font
+                font = ImageFont.truetype("arial.ttf", 24)
+            except:
+                font = ImageFont.load_default()
+            
+            # Calculate text position
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            x = (width - text_width) // 2
+            y = (height - text_height) // 2
+            
+            # Draw text
+            draw.text((x, y), text, fill='#333333', font=font, anchor="la")
+            
+            # Store in session state
             image_data = {
-                'prompt': enhanced_prompt,
+                'prompt': f"Placeholder for: {campaign_description}",
                 'timestamp': datetime.now(),
                 'campaign': campaign_description,
                 'image': image
@@ -419,24 +440,13 @@ class HuggingFaceImageGenerator:
             
             st.session_state.generated_images.append(image_data)
             
-            st.success("✨ Campaign image generated successfully!")
-            st.image(image, caption=f"Generated for: {campaign_description}", use_column_width=True)
-            
-            img_bytes = io.BytesIO()
-            image.save(img_bytes, format='PNG')
-            img_bytes.seek(0)
-            
-            st.download_button(
-                "📥 Download Campaign Image",
-                data=img_bytes.getvalue(),
-                file_name=f"campaign_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                mime="image/png"
-            )
+            st.info("📷 Generated placeholder campaign image")
+            st.image(image, caption=f"Placeholder for: {campaign_description}", use_column_width=True)
             
             return image
             
         except Exception as e:
-            st.error(f"❌ Error generating image: {str(e)}")
+            st.error(f"❌ Error creating placeholder: {str(e)}")
             return None
 
 # ================================
@@ -806,7 +816,7 @@ def main():
             st.error("📧 Email Service: Not configured")
         
         if HUGGING_FACE_TOKEN:
-            st.success(f"🎨 Image Generator: Connected")
+            st.success("🎨 Image Generator: Connected (API)")
         else:
             st.warning("🎨 Image Generator: Not configured")
         
@@ -908,9 +918,14 @@ def show_campaign_dashboard():
     
     # Handle image generation
     if generate_image and st.session_state.current_campaign:
-        image_gen = HuggingFaceImageGenerator()
+        image_gen = ExternalImageGenerator()
         campaign_desc = f"{st.session_state.current_campaign['company_name']} {st.session_state.current_campaign['campaign_type']}"
-        image_gen.generate_campaign_image(campaign_desc, "professional")
+        
+        # Try API first, fallback to placeholder
+        image = image_gen.generate_campaign_image_via_api(campaign_desc, "professional")
+        if image is None:
+            # Fallback to placeholder
+            image_gen.generate_placeholder_image(campaign_desc)
     
     # Display existing campaign
     if st.session_state.campaign_blueprint:
@@ -1156,307 +1171,4 @@ GMAIL_APP_PASSWORD=your_16_digit_app_password
         
         with config_col1:
             bulk_subject = st.text_input("📧 Campaign Subject Line", 
-                value="Important message for {{first_name}}")
-            test_email = st.text_input("🧪 Test Email Address", placeholder="your@email.com")
-        
-        with config_col2:
-            if st.session_state.email_template_html and st.session_state.email_template_text:
-                send_format = st.radio("📝 Send As:", ["HTML", "Plain Text"])
-                template_to_use = st.session_state.email_template_html if send_format == "HTML" else st.session_state.email_template_text
-                is_html = send_format == "HTML"
-            elif st.session_state.email_template_html:
-                template_to_use = st.session_state.email_template_html
-                is_html = True
-                st.info("✅ HTML template ready")
-            else:
-                template_to_use = st.session_state.email_template_text
-                is_html = False
-                st.info("✅ Plain text template ready")
-        
-        if test_email and st.button("🧪 Send Test Email"):
-            email_handler = EmailHandler()
-            personalizer = EmailPersonalizer()
-            
-            test_content = personalizer.personalize_template(template_to_use, "Test User", test_email)
-            test_subject = personalizer.personalize_template(bulk_subject, "Test User", test_email)
-            
-            with st.spinner(f"🧪 Sending test email to {test_email}..."):
-                success, error_msg = email_handler.send_single_email(test_email, test_subject, test_content, is_html)
-            
-            if success:
-                st.success("✅ Test email sent successfully!")
-            else:
-                st.error(f"❌ Test failed: {error_msg}")
-        
-        st.markdown("### 🎯 Campaign Launch")
-        
-        if st.button("🚀 LAUNCH BULK EMAIL CAMPAIGN", type="primary", use_container_width=True):
-            if not GMAIL_EMAIL or not GMAIL_APP_PASSWORD:
-                st.error("❌ Gmail configuration missing!")
-                st.code("""
-# Add to .env file:
-GMAIL_EMAIL=your_email@gmail.com
-GMAIL_APP_PASSWORD=your_16_digit_app_password
-                """)
-                st.stop()
-            
-            st.warning(f"⚠️ About to send {len(df)} personalized emails. This action cannot be undone!")
-            
-            if st.button("✅ CONFIRM & SEND ALL EMAILS"):
-                st.info("🚀 Starting bulk email campaign...")
-                
-                email_handler = EmailHandler()
-                personalizer = EmailPersonalizer()
-                
-                results = email_handler.send_bulk_emails(
-                    df, bulk_subject, template_to_use, personalizer, is_html
-                )
-                
-                if not results.empty:
-                    success_count = len(results[results['status'] == 'sent'])
-                    failed_count = len(results[results['status'] == 'failed'])
-                    invalid_count = len(results[results['status'] == 'invalid'])
-                    success_rate = (success_count / len(results)) * 100
-                    
-                    st.markdown("### 🎉 Campaign Results")
-                    
-                    result_col1, result_col2, result_col3, result_col4 = st.columns(4)
-                    
-                    with result_col1:
-                        st.markdown(f'<div class="success-metric">✅ Successfully Sent<br><h2>{success_count}</h2></div>', unsafe_allow_html=True)
-                    with result_col2:
-                        st.metric("❌ Failed", failed_count)
-                    with result_col3:
-                        st.metric("⚠️ Invalid", invalid_count)
-                    with result_col4:
-                        st.metric("📊 Success Rate", f"{success_rate:.1f}%")
-                    
-                    st.session_state.campaign_results = results
-                    
-                    csv_data = results.to_csv(index=False)
-                    st.download_button(
-                        "📥 Download Campaign Results",
-                        data=csv_data,
-                        file_name=f"bulk_email_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
-                    
-                    with st.expander("📋 View Detailed Campaign Results"):
-                        st.dataframe(results, use_container_width=True)
-                    
-                    if success_count > 0:
-                        st.balloons()
-                
-                else:
-                    st.error("❌ Campaign failed - no results generated")
-
-def show_analytics_reports():
-    """Analytics and reporting page"""
-    
-    st.header("📊 Campaign Analytics & Performance Reports")
-    
-    if st.session_state.current_campaign:
-        st.subheader("🗺️ Campaign Geographic Analysis")
-        
-        campaign = st.session_state.current_campaign
-        location = campaign['location']
-        
-        if location in COUNTRIES_DATA:
-            coords = COUNTRIES_DATA[location]['coords']
-            
-            map_data = pd.DataFrame({
-                'lat': [coords[0]],
-                'lon': [coords[1]], 
-                'location': [location],
-                'campaign': [campaign['campaign_type']],
-                'company': [campaign['company_name']]
-            })
-            
-            fig = px.scatter_mapbox(
-                map_data,
-                lat='lat',
-                lon='lon',
-                hover_name='location',
-                hover_data={'campaign': True, 'company': True, 'lat': False, 'lon': False},
-                color_discrete_sequence=['#00d4ff'],
-                size_max=20,
-                zoom=3,
-                title=f"Campaign Target Location: {location}"
-            )
-            
-            fig.update_layout(
-                mapbox_style="carto-darkmatter",
-                template="plotly_dark",
-                height=500
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("🎯 Campaign Type", campaign['campaign_type'])
-            with col2:
-                st.metric("🌍 Target Market", location)
-            with col3:
-                st.metric("💰 Budget", f"{campaign.get('budget', 'TBD')} {campaign.get('currency', 'USD')}")
-            with col4:
-                st.metric("📅 Duration", campaign.get('duration', 'TBD'))
-        
-        if campaign.get('budget') and campaign['budget'].isdigit():
-            st.subheader("📈 Campaign Performance Projections")
-            
-            budget = int(campaign['budget'])
-            
-            estimated_reach = budget * 30
-            estimated_clicks = int(estimated_reach * 0.04)
-            estimated_conversions = int(estimated_clicks * 0.03)
-            estimated_revenue = estimated_conversions * 65
-            roi = ((estimated_revenue - budget) / budget) * 100 if budget > 0 else 0
-            
-            proj_col1, proj_col2, proj_col3, proj_col4 = st.columns(4)
-            
-            with proj_col1:
-                st.metric("👥 Estimated Reach", f"{estimated_reach:,}")
-            with proj_col2:
-                st.metric("👆 Expected Clicks", f"{estimated_clicks:,}")
-            with proj_col3:
-                st.metric("💰 Projected Conversions", f"{estimated_conversions:,}")
-            with proj_col4:
-                st.metric("📊 Projected ROI", f"{roi:.0f}%")
-            
-            days = list(range(1, 31))
-            daily_reach = [int(estimated_reach * (i/30) * (1 + 0.1 * np.sin(i/5))) for i in days]
-            cumulative_conversions = [int(estimated_conversions * (i/30)) for i in days]
-            
-            chart_data = pd.DataFrame({
-                'Day': days,
-                'Daily Reach': daily_reach,
-                'Cumulative Conversions': cumulative_conversions
-            })
-            
-            fig = px.line(chart_data, x='Day', y=['Daily Reach', 'Cumulative Conversions'],
-                         title="Projected 30-Day Campaign Performance")
-            fig.update_layout(template="plotly_dark")
-            st.plotly_chart(fig, use_container_width=True)
-    
-    if st.session_state.generated_images:
-        st.markdown("---")
-        st.subheader("🎨 Generated Campaign Images")
-        
-        for i, img_data in enumerate(st.session_state.generated_images):
-            if 'image' in img_data:
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    st.image(img_data['image'], caption=f"Campaign Image {i+1}: {img_data['campaign']}", use_column_width=True)
-                
-                with col2:
-                    st.write(f"**Generated:** {img_data['timestamp'].strftime('%Y-%m-%d %H:%M')}")
-                    st.write(f"**Campaign:** {img_data['campaign']}")
-                    
-                    img_bytes = io.BytesIO()
-                    img_data['image'].save(img_bytes, format='PNG')
-                    img_bytes.seek(0)
-                    
-                    st.download_button(
-                        f"📥 Download",
-                        data=img_bytes.getvalue(),
-                        file_name=f"campaign_image_{i+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png",
-                        use_container_width=True
-                    )
-    
-    if st.session_state.campaign_results is not None:
-        st.markdown("---")
-        st.subheader("📧 Email Campaign Performance Analysis")
-        
-        results_df = st.session_state.campaign_results
-        
-        total_sent = len(results_df[results_df['status'] == 'sent'])
-        total_failed = len(results_df[results_df['status'] == 'failed'])
-        total_invalid = len(results_df[results_df['status'] == 'invalid'])
-        success_rate = (total_sent / len(results_df)) * 100 if len(results_df) > 0 else 0
-        
-        perf_col1, perf_col2, perf_col3, perf_col4 = st.columns(4)
-        
-        with perf_col1:
-            st.metric("📧 Total Emails", len(results_df))
-        with perf_col2:
-            st.metric("✅ Successfully Delivered", total_sent, delta=f"{success_rate:.1f}%")
-        with perf_col3:
-            st.metric("❌ Failed Deliveries", total_failed)
-        with perf_col4:
-            st.metric("⚠️ Invalid Addresses", total_invalid)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            status_counts = results_df['status'].value_counts()
-            fig = px.pie(
-                values=status_counts.values, 
-                names=status_counts.index,
-                title="Email Campaign Results Distribution",
-                color_discrete_map={'sent': '#28a745', 'failed': '#dc3545', 'invalid': '#ffc107'}
-            )
-            fig.update_layout(template="plotly_dark")
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            if total_sent > 0:
-                sent_emails = results_df[results_df['status'] == 'sent'].copy()
-                sent_emails['domain'] = sent_emails['email'].str.split('@').str[1]
-                domain_counts = sent_emails['domain'].value_counts().head(8)
-                
-                fig = px.bar(
-                    x=domain_counts.values, 
-                    y=domain_counts.index,
-                    title="Top Email Domains Reached",
-                    orientation='h',
-                    color_discrete_sequence=['#28a745']
-                )
-                fig.update_layout(template="plotly_dark")
-                st.plotly_chart(fig, use_container_width=True)
-        
-        with st.expander("📋 View Detailed Email Campaign Results"):
-            st.dataframe(
-                results_df,
-                column_config={
-                    "email": st.column_config.TextColumn("📧 Email Address"),
-                    "name": st.column_config.TextColumn("👤 Name"),
-                    "status": st.column_config.TextColumn("📊 Status"),
-                    "error": st.column_config.TextColumn("❌ Error (if any)"),
-                    "timestamp": st.column_config.TextColumn("⏰ Time Sent")
-                },
-                use_container_width=True
-            )
-    
-    else:
-        st.info("""
-        📊 **Analytics Dashboard**
-        
-        This comprehensive analytics section provides:
-        
-        **🗺️ Geographic Analysis:**
-        - Interactive campaign targeting maps
-        - Location-based performance insights
-        
-        **📈 Performance Projections:**
-        - ROI calculations and forecasts
-        - Estimated reach and conversion metrics
-        
-        **📧 Email Campaign Analytics:**
-        - Real-time delivery tracking
-        - Success rate analysis
-        - Domain performance breakdown
-        
-        **🎨 Creative Asset Tracking:**
-        - Generated campaign images
-        - Asset download and management
-        
-        Create campaigns and send emails to unlock powerful analytics insights!
-        """)
-
-if __name__ == "__main__":
-    main()
+                value="Important
