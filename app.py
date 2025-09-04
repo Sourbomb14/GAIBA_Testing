@@ -25,7 +25,7 @@ HUGGING_FACE_TOKEN = st.secrets.get("HUGGING_FACE_TOKEN", "")
 
 # Countries and Currencies data
 COUNTRIES_DATA = {
-    "Global": {"coords": [0, 0], "currency": "USD"},
+    "Global": {"coords": , "currency": "USD"},
     "United States": {"coords": [39.8283, -98.5795], "currency": "USD"},
     "Canada": {"coords": [56.1304, -106.3468], "currency": "CAD"},
     "United Kingdom": {"coords": [55.3781, -3.4360], "currency": "GBP"},
@@ -111,7 +111,7 @@ class GroqCampaignGenerator:
                 max_tokens=4000
             )
             
-            return response.choices[0].message.content
+            return response.choices.message.content
             
         except Exception as e:
             st.error(f"Error generating campaign with Groq: {e}")
@@ -141,7 +141,7 @@ class GroqCampaignGenerator:
                 max_tokens=2000
             )
             
-            return response.choices[0].message.content
+            return response.choices.message.content
             
         except Exception as e:
             st.error(f"Error generating email template: {e}")
@@ -165,7 +165,7 @@ class GroqCampaignGenerator:
             
             sample_data = df_sample.head(10).to_dict(orient='records')
             
-            prompt = f"You are a professional data analyst. Analyze the following dataset: FILE INFO: {file_info}. SAMPLE DATA (first 10 rows): {json.dumps(sample_data, indent=2, default=safe_json_serializable)}. DATASET SHAPE: {df_sample.shape[0]} rows, {df_sample.shape[1]} columns. COLUMNS: {list(df_sample.columns)}. Please provide a comprehensive analysis including: 1. DATA SUMMARY & STATISTICS, 2. KEY INSIGHTS & TRENDS, 3. RECOMMENDED VISUALIZATIONS - Suggest specific chart types for the data - Recommend columns to visualize together, 4. DATA QUALITY ASSESSMENT, 5. BUSINESS RECOMMENDATIONS - Actionable insights for management - Strategic recommendations based on the data. Format your response with clear headings and bullet points for easy reading."
+            prompt = f"You are a professional data analyst. Analyze the following dataset: FILE INFO: {file_info}. SAMPLE DATA (first 10 rows): {json.dumps(sample_data, indent=2, default=safe_json_serializable)}. DATASET SHAPE: {df_sample.shape} rows, {df_sample.shape} columns. COLUMNS: {list(df_sample.columns)}. Please provide a comprehensive analysis including: 1. DATA SUMMARY & STATISTICS, 2. KEY INSIGHTS & TRENDS, 3. RECOMMENDED VISUALIZATIONS - Suggest specific chart types for the data - Recommend columns to visualize together, 4. DATA QUALITY ASSESSMENT, 5. BUSINESS RECOMMENDATIONS - Actionable insights for management - Strategic recommendations based on the data. Format your response with clear headings and bullet points for easy reading."[1]
             
             response = self.client.chat.completions.create(
                 messages=[
@@ -183,7 +183,7 @@ class GroqCampaignGenerator:
                 max_tokens=3000
             )
             
-            return response.choices[0].message.content
+            return response.choices.message.content
             
         except Exception as e:
             st.error(f"Error analyzing data: {e}")
@@ -237,12 +237,11 @@ class GroqCampaignGenerator:
         strategy_text += f"**💼 Customer Segment:** {customer_segment}\n\n"
         
         strategy_text += "## 📢 Channel Strategy Dashboard\n"
-        strategy_text += "```
+        strategy_text += "Performance Indicators:\n"
         strategy_text += "📧 Email Marketing     ████████████ 85%\n"
         strategy_text += "📱 Social Media       ████████░░░░ 70%\n"
         strategy_text += "🎯 Google Ads         ██████░░░░░░ 60%\n"
-        strategy_text += "📊 Content Marketing  ████████░░░░ 75%\n"
-        strategy_text += "```\n\n"
+        strategy_text += "📊 Content Marketing  ████████░░░░ 75%\n\n"
         
         strategy_text += "### 📧 Email Marketing Strategy\n"
         strategy_text += "- 👋 Welcome series for new subscribers\n"
@@ -251,7 +250,6 @@ class GroqCampaignGenerator:
         strategy_text += "- 🎯 Personalized product recommendations\n\n"
         
         strategy_text += "## 📅 Implementation Timeline\n"
-        strategy_text += "```
         strategy_text += "Phase 1 (Weeks 1-2): 🎯 Strategy & Assets\n"
         strategy_text += "├── Strategy finalization\n"
         strategy_text += "├── Creative asset development\n"
@@ -267,8 +265,7 @@ class GroqCampaignGenerator:
         strategy_text += "Phase 4 (Weeks 7-8): 📊 Analyze & Plan\n"
         strategy_text += "├── Comprehensive analysis\n"
         strategy_text += "├── ROI calculation\n"
-        strategy_text += "└── Next campaign planning\n"
-        strategy_text += "```\n\n"
+        strategy_text += "└── Next campaign planning\n\n"
         
         strategy_text += "## 💰 Budget Allocation Breakdown\n"
         strategy_text += "| Category | Percentage | Amount |\n"
@@ -346,10 +343,10 @@ We're excited to share this exclusive {template_type.lower()} with you.
 As a valued member of our community, you deserve the best we have to offer.
 
 Here's what makes this special:
-• Personalized just for you
-• Exclusive member benefits
-• Limited-time opportunity
-• Premium experience
+-  Personalized just for you
+-  Exclusive member benefits
+-  Limited-time opportunity
+-  Premium experience
 
 Ready to explore? Visit our website or reply to this email.
 
@@ -358,7 +355,7 @@ Thank you for being part of our journey, {{{{name}}}}!
 Best regards,
 The Marketing Team
 
----
+***
 You received this email because you're subscribed to our updates.'''
             return text_template
 
@@ -464,14 +461,14 @@ class FixedImageGenerator:
             
             # Title
             title_bbox = draw.textbbox((0, 0), title, font=title_font)
-            title_width = title_bbox[2] - title_bbox[0]
+            title_width = title_bbox - title_bbox[2]
             title_x = (width - title_width) // 2
             draw.text((title_x, height//2 - 60), title, fill='white', font=title_font)
             
             # Subtitle
             wrapped_text = textwrap.fill(subtitle, width=40)
             subtitle_bbox = draw.textbbox((0, 0), wrapped_text, font=subtitle_font)
-            subtitle_width = subtitle_bbox[2] - subtitle_bbox[0]
+            subtitle_width = subtitle_bbox - subtitle_bbox[2]
             subtitle_x = (width - subtitle_width) // 2
             draw.text((subtitle_x, height//2 + 20), wrapped_text, fill='#e0e7ff', font=subtitle_font)
             
@@ -516,7 +513,7 @@ class EmailPersonalizer:
     def extract_name_from_email(email):
         """Extract potential name from email address"""
         try:
-            local_part = email.split('@')[0]
+            local_part = email.split('@')
             name_part = re.sub(r'[0-9._-]', ' ', local_part)
             name_parts = [part.capitalize() for part in name_part.split() if len(part) > 1]
             return ' '.join(name_parts) if name_parts else 'Valued Customer'
@@ -526,7 +523,7 @@ class EmailPersonalizer:
     @staticmethod
     def personalize_template(template, name, email=None):
         """Personalize email template"""
-        first_name = name.split()[0] if name and ' ' in name else name
+        first_name = name.split() if name and ' ' in name else name
         
         personalized = template.replace('{name}', name or 'Valued Customer')
         personalized = personalized.replace('{{name}}', name or 'Valued Customer')
@@ -771,15 +768,15 @@ class EnhancedDataProcessor:
                 if ',' in line:
                     parts = [p.strip() for p in line.split(',')]
                     if len(parts) >= 2:
-                        email_part = parts[0] if '@' in parts[0] else parts[1]
-                        name_part = parts[1] if '@' in parts[0] else parts[0]
+                        email_part = parts if '@' in parts else parts[1]
+                        name_part = parts if '@' in parts else parts[1]
                     else:
-                        email_part = parts[0]
+                        email_part = parts
                         name_part = self.personalizer.extract_name_from_email(email_part)
                 elif '\t' in line:
                     parts = [p.strip() for p in line.split('\t')]
-                    email_part = parts[0] if '@' in parts[0] else parts[1] if len(parts) > 1 else parts[0]
-                    name_part = parts[1] if '@' in parts[0] and len(parts) > 1 else self.personalizer.extract_name_from_email(email_part)
+                    email_part = parts if '@' in parts else parts if len(parts) > 1 else parts[1]
+                    name_part = parts if '@' in parts and len(parts) > 1 else self.personalizer.extract_name_from_email(email_part)[1]
                 else:
                     email_part = line
                     name_part = self.personalizer.extract_name_from_email(email_part)
@@ -804,7 +801,7 @@ class EnhancedDataProcessor:
         """Extract sheet ID from Google Sheets URL"""
         try:
             if '/spreadsheets/d/' in url:
-                return url.split('/spreadsheets/d/')[1].split('/')[0]
+                return url.split('/spreadsheets/d/').split('/')[1]
             return None
         except:
             return None
@@ -1261,7 +1258,7 @@ mark.wilson@example.com""")
         with col1:
             st.metric("👥 Total Contacts", len(edited_contacts))
         with col2:
-            domains = edited_contacts['email'].str.split('@').str[1].nunique()
+            domains = edited_contacts['email'].str.split('@').str.nunique()[1]
             st.metric("🏢 Unique Domains", domains)
         with col3:
             avg_name_length = edited_contacts['name'].str.len().mean()
@@ -1283,7 +1280,7 @@ mark.wilson@example.com""")
         with overview_col1:
             st.metric("👥 Recipients", len(df))
         with overview_col2:
-            domains = df['email'].str.split('@').str[1].nunique()
+            domains = df['email'].str.split('@').str.nunique()[1]
             st.metric("🏢 Domains", domains)
         with overview_col3:
             st.metric("📧 Template", "✅ Ready")
@@ -1436,7 +1433,7 @@ def show_analytics_reports():
                         # Show data preview
                         with st.expander(f"📋 Data Preview - {filename}"):
                             st.dataframe(df.head(10), use_container_width=True)
-                            st.write(f"**Shape:** {df.shape[0]} rows, {df.shape[1]} columns")
+                            st.write(f"**Shape:** {df.shape} rows, {df.shape} columns")[1]
                         
                         # AI Analysis
                         analysis = generator.analyze_data(df, f"{file_type}: {filename}")
@@ -1454,21 +1451,21 @@ def show_analytics_reports():
                                 
                                 with vis_col1:
                                     if len(numeric_cols) >= 1:
-                                        fig = px.histogram(df, x=numeric_cols[0], 
-                                                         title=f"Distribution of {numeric_cols[0]}")
+                                        fig = px.histogram(df, x=numeric_cols, 
+                                                         title=f"Distribution of {numeric_cols}")
                                         fig.update_layout(template="plotly_dark")
                                         st.plotly_chart(fig, use_container_width=True)
                                 
                                 with vis_col2:
                                     if len(numeric_cols) >= 2:
-                                        fig = px.scatter(df, x=numeric_cols[0], y=numeric_cols[1],
-                                                       title=f"{numeric_cols[0]} vs {numeric_cols[1]}")
+                                        fig = px.scatter(df, x=numeric_cols, y=numeric_cols,[1]
+                                                       title=f"{numeric_cols} vs {numeric_cols}")[1]
                                         fig.update_layout(template="plotly_dark")
                                         st.plotly_chart(fig, use_container_width=True)
                                 
                                 if len(categorical_cols) > 0 and len(numeric_cols) > 0:
-                                    fig = px.box(df, x=categorical_cols[0], y=numeric_cols[0],
-                                               title=f"{numeric_cols[0]} by {categorical_cols[0]}")
+                                    fig = px.box(df, x=categorical_cols, y=numeric_cols,
+                                               title=f"{numeric_cols} by {categorical_cols}")
                                     fig.update_layout(template="plotly_dark")
                                     st.plotly_chart(fig, use_container_width=True)
                     
@@ -1493,7 +1490,7 @@ def show_analytics_reports():
                     
                     with st.expander("📋 Data Preview"):
                         st.dataframe(df.head(10), use_container_width=True)
-                        st.write(f"**Shape:** {df.shape[0]} rows, {df.shape[1]} columns")
+                        st.write(f"**Shape:** {df.shape} rows, {df.shape} columns")[1]
                     
                     generator = GroqCampaignGenerator()
                     analysis = generator.analyze_data(df, msg)
@@ -1544,8 +1541,8 @@ def show_analytics_reports():
             coords = COUNTRIES_DATA[location]['coords']
             
             map_data = pd.DataFrame({
-                'lat': [coords[0]],
-                'lon': [coords[1]], 
+                'lat': [coords],
+                'lon': [coords],[1]
                 'location': [location],
                 'campaign': [campaign['campaign_type']],
                 'company': [campaign['company_name']]
@@ -1627,7 +1624,7 @@ def show_analytics_reports():
         
         for i, img_data in enumerate(st.session_state.generated_images):
             if 'image' in img_data:
-                col1, col2 = st.columns([3, 1])
+                col1, col2 = st.columns()[1]
                 
                 with col1:
                     st.image(img_data['image'], caption=f"Campaign Image {i+1}: {img_data['campaign']}", use_container_width=True)
@@ -1715,7 +1712,7 @@ def show_analytics_reports():
             )
     
     else:
-        st.info("📊 **Enhanced Analytics Dashboard** **🤖 AI-Powered Data Analysis:** - Upload CSV, Excel, JSON files for analysis - Connect to Google Sheets for real-time data - Get AI-powered insights and visualizations from Groq - Automated data quality checks and recommendations **🗺️ Geographic Campaign Analysis:** - Interactive campaign targeting maps - Location-based performance insights **📈 Performance Projections:** - ROI calculations and forecasts - Estimated reach and conversion metrics **📧 Email Campaign Analytics:** - Real-time delivery tracking with fixed yagmail - Success rate analysis and domain breakdown **🎨 Creative Asset Management:** - Generated campaign images with your HF model - Asset download and management tools Upload data or create campaigns to unlock powerful AI analytics insights!")
+        st.info("📊 **Enhanced Analytics Dashboard** - Upload CSV, Excel, JSON files for AI-powered analysis - Connect to Google Sheets for real-time data insights - Automated visualizations and business recommendations - Geographic campaign analysis and performance projections - Real-time email campaign tracking and domain analysis - Professional campaign image generation and management. Upload data or create campaigns to unlock powerful analytics!")
 
 if __name__ == "__main__":
     main()
