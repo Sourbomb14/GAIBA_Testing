@@ -331,7 +331,6 @@ class ExternalImageGenerator:
             
         # Try multiple models in order of preference
         models_to_try = [
-            "stable-diffusion-v1-5/stable-diffusion-v1-5",
             "black-forest-labs/FLUX.1-dev",
             "stabilityai/stable-diffusion-xl-base-1.0"
         ]
