@@ -1,15 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import smtplib
-import ssl
+import yagmail
 import time
 import re
 import json
 import plotly.express as px
 import plotly.graph_objects as go
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from email_validator import validate_email, EmailNotValidError
 import os
 from datetime import datetime, timedelta
@@ -17,15 +14,15 @@ import io
 import base64
 from groq import Groq
 import requests
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
+import textwrap
+import csv
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # Configuration using Streamlit Secrets
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 GROQ_MODEL = st.secrets.get("GROQ_MODEL", "openai/gpt-oss-120b")
-GMAIL_EMAIL = st.secrets["GMAIL_EMAIL"]
-GMAIL_APP_PASSWORD = st.secrets["GMAIL_APP_PASSWORD"]
-SMTP_SERVER = st.secrets.get("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(st.secrets.get("SMTP_PORT", 587))
 HUGGING_FACE_TOKEN = st.secrets.get("HUGGING_FACE_TOKEN", "")
 
 # Countries and Currencies data
@@ -107,7 +104,7 @@ class GroqCampaignGenerator:
                         "content": prompt
                     }
                 ],
-                model=GROQ_MODEL,  # Using openai/gpt-oss-120b as specified
+                model=GROQ_MODEL,
                 temperature=0.7,
                 max_tokens=4000
             )
@@ -317,127 +314,166 @@ You received this email because you're subscribed to our updates.
 """
 
 # ================================
-# EXTERNAL IMAGE GENERATOR USING APIs
+# IMPROVED IMAGE GENERATOR
 # ================================
 
 class ExternalImageGenerator:
-    """Generate images using external APIs (Streamlit Cloud compatible)"""
+    """Generate images using external APIs with better error handling"""
     
     def __init__(self):
         self.hugging_face_token = HUGGING_FACE_TOKEN
         
     def generate_campaign_image_via_api(self, campaign_description, style="professional"):
-        """Generate campaign image using HuggingFace Inference API"""
+        """Generate campaign image using HuggingFace Inference API with multiple fallbacks"""
         if not self.hugging_face_token:
             st.warning("⚠️ HuggingFace token not configured for image generation")
-            return None
+            return self.generate_placeholder_image(campaign_description)
             
-        try:
-            # Enhanced prompt for marketing
-            enhanced_prompt = f"Professional marketing campaign image for {campaign_description}, {style} style, high quality, vibrant colors, modern design, commercial photography, eye-catching, brand advertisement, 4K resolution, clean layout"
-            
-            # HuggingFace Inference API endpoint
-            API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-            headers = {"Authorization": f"Bearer {self.hugging_face_token}"}
-            
-            payload = {
-                "inputs": enhanced_prompt,
-                "parameters": {
-                    "num_inference_steps": 20,
-                    "guidance_scale": 7.5,
-                    "width": 512,
-                    "height": 512
-                }
-            }
-            
-            with st.spinner("🎨 Generating your campaign image via API..."):
-                response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
+        # Try multiple models in order of preference
+        models_to_try = [
+            "runwayml/stable-diffusion-v1-5",
+            "CompVis/stable-diffusion-v1-4",
+            "stabilityai/stable-diffusion-2-1"
+        ]
+        
+        enhanced_prompt = f"Professional marketing campaign image for {campaign_description}, {style} style, high quality, vibrant colors, modern design, commercial photography, eye-catching, brand advertisement, 4K resolution, clean layout"
+        
+        for model_id in models_to_try:
+            try:
+                API_URL = f"https://api-inference.huggingface.co/models/{model_id}"
+                headers = {"Authorization": f"Bearer {self.hugging_face_token}"}
                 
-                if response.status_code == 200:
-                    # Convert response to image
-                    image_bytes = response.content
-                    image = Image.open(io.BytesIO(image_bytes))
-                    
-                    # Store in session state
-                    image_data = {
-                        'prompt': enhanced_prompt,
-                        'timestamp': datetime.now(),
-                        'campaign': campaign_description,
-                        'image': image
+                payload = {
+                    "inputs": enhanced_prompt,
+                    "parameters": {
+                        "num_inference_steps": 20,
+                        "guidance_scale": 7.5,
+                        "width": 512,
+                        "height": 512
                     }
+                }
+                
+                with st.spinner(f"🎨 Trying {model_id}..."):
+                    response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
                     
-                    st.session_state.generated_images.append(image_data)
+                    if response.status_code == 200:
+                        # Success!
+                        image_bytes = response.content
+                        image = Image.open(io.BytesIO(image_bytes))
+                        
+                        # Store in session state
+                        image_data = {
+                            'prompt': enhanced_prompt,
+                            'timestamp': datetime.now(),
+                            'campaign': campaign_description,
+                            'image': image,
+                            'model': model_id
+                        }
+                        
+                        st.session_state.generated_images.append(image_data)
+                        
+                        st.success(f"✨ Campaign image generated successfully with {model_id}!")
+                        st.image(image, caption=f"Generated for: {campaign_description}", use_container_width=True)
+                        
+                        # Download option
+                        img_bytes = io.BytesIO()
+                        image.save(img_bytes, format='PNG')
+                        img_bytes.seek(0)
+                        
+                        st.download_button(
+                            "📥 Download Campaign Image",
+                            data=img_bytes.getvalue(),
+                            file_name=f"campaign_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                            mime="image/png"
+                        )
+                        
+                        return image
                     
-                    st.success("✨ Campaign image generated successfully!")
-                    st.image(image, caption=f"Generated for: {campaign_description}", use_column_width=True)
-                    
-                    # Provide download option
-                    img_bytes = io.BytesIO()
-                    image.save(img_bytes, format='PNG')
-                    img_bytes.seek(0)
-                    
-                    st.download_button(
-                        "📥 Download Campaign Image",
-                        data=img_bytes.getvalue(),
-                        file_name=f"campaign_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png"
-                    )
-                    
-                    return image
-                else:
-                    st.error(f"❌ Image generation failed: {response.status_code}")
-                    st.info("💡 The model might be loading. Try again in a few minutes.")
-                    return None
-                    
-        except requests.exceptions.Timeout:
-            st.error("⏰ Image generation timed out. Please try again.")
-            return None
-        except Exception as e:
-            st.error(f"❌ Error generating image: {str(e)}")
-            return None
+                    elif response.status_code == 403:
+                        st.warning(f"⚠️ 403 Forbidden for {model_id} - trying next model...")
+                        continue
+                        
+                    elif response.status_code == 429:
+                        st.warning(f"⚠️ Rate limited for {model_id} - trying next model...")
+                        continue
+                        
+                    else:
+                        st.warning(f"⚠️ Error {response.status_code} for {model_id} - trying next model...")
+                        continue
+                        
+            except Exception as e:
+                st.warning(f"⚠️ Failed to use {model_id}: {str(e)}")
+                continue
+        
+        # If all models fail, generate placeholder
+        st.info("💡 All AI models failed, generating professional placeholder image...")
+        return self.generate_placeholder_image(campaign_description)
     
     def generate_placeholder_image(self, campaign_description):
-        """Generate a placeholder image with campaign text"""
+        """Generate a professional-looking placeholder image"""
         try:
-            from PIL import Image, ImageDraw, ImageFont
-            
-            # Create a placeholder image
+            # Create a high-quality placeholder
             width, height = 512, 512
-            image = Image.new('RGB', (width, height), color='#4a90e2')
+            
+            # Gradient background
+            image = Image.new('RGB', (width, height), color='#1e3a8a')
             draw = ImageDraw.Draw(image)
             
+            # Create gradient effect
+            for y in range(height):
+                color_value = int(30 + (y / height) * 60)
+                for x in range(width):
+                    draw.point((x, y), fill=(color_value, color_value + 20, color_value + 60))
+            
             # Add campaign text
-            text = f"🚀 Campaign Image\n\n{campaign_description[:50]}..."
+            title = "🚀 CAMPAIGN IMAGE"
+            subtitle = campaign_description[:60] + "..." if len(campaign_description) > 60 else campaign_description
             
             try:
-                # Try to use a nice font
-                font = ImageFont.truetype("arial.ttf", 24)
+                title_font = ImageFont.truetype("arial.ttf", 32)
+                subtitle_font = ImageFont.truetype("arial.ttf", 18)
             except:
-                font = ImageFont.load_default()
+                title_font = ImageFont.load_default()
+                subtitle_font = ImageFont.load_default()
             
-            # Calculate text position
-            bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
+            # Title
+            title_bbox = draw.textbbox((0, 0), title, font=title_font)
+            title_width = title_bbox[2] - title_bbox[0]
+            title_x = (width - title_width) // 2
+            draw.text((title_x, height//2 - 60), title, fill='white', font=title_font)
             
-            x = (width - text_width) // 2
-            y = (height - text_height) // 2
-            
-            # Draw text
-            draw.text((x, y), text, fill='white', font=font, anchor="la")
+            # Subtitle (wrapped)
+            wrapped_text = textwrap.fill(subtitle, width=40)
+            subtitle_bbox = draw.textbbox((0, 0), wrapped_text, font=subtitle_font)
+            subtitle_width = subtitle_bbox[2] - subtitle_bbox[0]
+            subtitle_x = (width - subtitle_width) // 2
+            draw.text((subtitle_x, height//2 + 20), wrapped_text, fill='#e0e7ff', font=subtitle_font)
             
             # Store in session state
             image_data = {
-                'prompt': f"Placeholder for: {campaign_description}",
+                'prompt': f"Professional placeholder for: {campaign_description}",
                 'timestamp': datetime.now(),
                 'campaign': campaign_description,
-                'image': image
+                'image': image,
+                'model': 'placeholder'
             }
             
             st.session_state.generated_images.append(image_data)
             
-            st.info("📷 Generated placeholder campaign image")
-            st.image(image, caption=f"Placeholder for: {campaign_description}", use_column_width=True)
+            st.success("📷 Generated professional placeholder campaign image")
+            st.image(image, caption=f"Placeholder for: {campaign_description}", use_container_width=True)
+            
+            # Download option for placeholder too
+            img_bytes = io.BytesIO()
+            image.save(img_bytes, format='PNG')
+            img_bytes.seek(0)
+            
+            st.download_button(
+                "📥 Download Placeholder Image",
+                data=img_bytes.getvalue(),
+                file_name=f"placeholder_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                mime="image/png"
+            )
             
             return image
             
@@ -478,17 +514,24 @@ class EmailPersonalizer:
         return personalized
 
 # ================================
-# EMAIL HANDLER - BULK AND SINGLE
+# YAGMAIL EMAIL HANDLER
 # ================================
 
-class EmailHandler:
-    """Handle both bulk and single email sending"""
+class YagmailHandler:
+    """Handle both bulk and single email sending with yagmail"""
     
-    def __init__(self):
-        self.smtp_server = SMTP_SERVER
-        self.smtp_port = SMTP_PORT
-        self.email = GMAIL_EMAIL
-        self.password = GMAIL_APP_PASSWORD
+    def __init__(self, sender_email, sender_password):
+        self.sender_email = sender_email
+        self.sender_password = sender_password
+        self.yag = None
+        
+    def initialize_connection(self):
+        """Initialize yagmail connection"""
+        try:
+            self.yag = yagmail.SMTP(user=self.sender_email, password=self.sender_password)
+            return True, "Connection successful"
+        except Exception as e:
+            return False, f"Failed to connect: {str(e)}"
     
     def validate_email_address(self, email):
         """Validate email address format"""
@@ -498,43 +541,26 @@ class EmailHandler:
         except EmailNotValidError:
             return False
     
-    def send_single_email(self, to_email, subject, body, is_html=True):
-        """Send a single email with detailed error handling"""
-        if not self.email or not self.password:
-            return False, "Gmail credentials not configured in Streamlit secrets"
-            
+    def send_single_email(self, to_email, subject, body):
+        """Send a single email"""
+        if not self.yag:
+            success, msg = self.initialize_connection()
+            if not success:
+                return False, msg
+                
         try:
-            msg = MIMEMultipart('alternative')
-            msg['From'] = self.email
-            msg['To'] = to_email
-            msg['Subject'] = subject
-            
-            if is_html:
-                msg.attach(MIMEText(body, 'html'))
-            else:
-                msg.attach(MIMEText(body, 'plain'))
-            
-            context = ssl.create_default_context()
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls(context=context)
-                server.login(self.email, self.password)
-                text = msg.as_string()
-                server.sendmail(self.email, to_email, text)
-            
+            self.yag.send(to=to_email, subject=subject, contents=body)
             return True, "Success"
-        except smtplib.SMTPAuthenticationError:
-            return False, "Gmail authentication failed. Check your app password."
-        except smtplib.SMTPRecipientsRefused:
-            return False, f"Recipient {to_email} was refused"
         except Exception as e:
-            return False, f"SMTP Error: {str(e)}"
+            return False, f"Failed to send: {str(e)}"
     
-    def send_bulk_emails(self, email_list, subject, body_template, personalizer, is_html=True):
-        """WORKING bulk email sending function"""
-        if not self.email or not self.password:
-            st.error("❌ Gmail configuration missing!")
-            st.error("Please configure GMAIL_EMAIL and GMAIL_APP_PASSWORD in Streamlit secrets")
-            return pd.DataFrame()
+    def send_bulk_emails(self, email_list, subject, body_template, personalizer):
+        """Send bulk personalized emails using yagmail"""
+        if not self.yag:
+            success, msg = self.initialize_connection()
+            if not success:
+                st.error(f"❌ Connection failed: {msg}")
+                return pd.DataFrame()
         
         total_emails = len(email_list)
         results = []
@@ -547,95 +573,76 @@ class EmailHandler:
         failed_count = 0
         invalid_count = 0
         
-        try:
-            context = ssl.create_default_context()
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls(context=context)
-                server.login(self.email, self.password)
+        for index, row in email_list.iterrows():
+            current_progress = (index + 1) / total_emails
+            
+            progress_bar.progress(current_progress)
+            status_text.info(f"📧 Sending {index + 1}/{total_emails}: {row['email']}")
+            
+            try:
+                if not self.validate_email_address(row['email']):
+                    invalid_count += 1
+                    results.append({
+                        "email": row['email'],
+                        "name": row.get('name', 'Unknown'),
+                        "status": "invalid",
+                        "error": "Invalid email format",
+                        "timestamp": datetime.now().strftime('%H:%M:%S')
+                    })
+                    continue
                 
-                for index, row in email_list.iterrows():
-                    current_progress = (index + 1) / total_emails
-                    
-                    progress_bar.progress(current_progress)
-                    status_text.info(f"📧 Sending {index + 1}/{total_emails}: {row['email']}")
-                    
-                    try:
-                        if not self.validate_email_address(row['email']):
-                            invalid_count += 1
-                            results.append({
-                                "email": row['email'],
-                                "name": row.get('name', 'Unknown'),
-                                "status": "invalid",
-                                "error": "Invalid email format",
-                                "timestamp": datetime.now().strftime('%H:%M:%S')
-                            })
-                            continue
-                        
-                        name = row.get('name', personalizer.extract_name_from_email(row['email']))
-                        personal_subject = personalizer.personalize_template(subject, name, row['email'])
-                        personal_body = personalizer.personalize_template(body_template, name, row['email'])
-                        
-                        msg = MIMEMultipart('alternative')
-                        msg['Subject'] = personal_subject
-                        msg['From'] = self.email
-                        msg['To'] = row['email']
-                        
-                        if is_html:
-                            msg.attach(MIMEText(personal_body, 'html'))
-                        else:
-                            msg.attach(MIMEText(personal_body, 'plain'))
-                        
-                        server.sendmail(self.email, row['email'], msg.as_string())
-                        
-                        results.append({
-                            "email": row['email'],
-                            "name": name,
-                            "status": "sent",
-                            "error": "",
-                            "timestamp": datetime.now().strftime('%H:%M:%S')
-                        })
-                        sent_count += 1
-                        
-                    except Exception as email_error:
-                        results.append({
-                            "email": row['email'],
-                            "name": row.get('name', 'Unknown'),
-                            "status": "failed",
-                            "error": str(email_error),
-                            "timestamp": datetime.now().strftime('%H:%M:%S')
-                        })
-                        failed_count += 1
-                    
-                    with metrics_container:
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("✅ Sent", sent_count)
-                        col2.metric("❌ Failed", failed_count)
-                        col3.metric("⚠️ Invalid", invalid_count)
-                        col4.metric("📊 Progress", f"{current_progress*100:.0f}%")
-                    
-                    time.sleep(1)
+                name = row.get('name', personalizer.extract_name_from_email(row['email']))
+                personal_subject = personalizer.personalize_template(subject, name, row['email'])
+                personal_body = personalizer.personalize_template(body_template, name, row['email'])
                 
-                progress_bar.progress(1.0)
-                status_text.success("🎉 Email campaign completed!")
+                # Send with yagmail
+                self.yag.send(to=row['email'], subject=personal_subject, contents=personal_body)
                 
-        except Exception as smtp_error:
-            st.error(f"❌ SMTP Connection Error: {str(smtp_error)}")
-            return pd.DataFrame()
+                results.append({
+                    "email": row['email'],
+                    "name": name,
+                    "status": "sent",
+                    "error": "",
+                    "timestamp": datetime.now().strftime('%H:%M:%S')
+                })
+                sent_count += 1
+                
+            except Exception as email_error:
+                results.append({
+                    "email": row['email'],
+                    "name": row.get('name', 'Unknown'),
+                    "status": "failed",
+                    "error": str(email_error),
+                    "timestamp": datetime.now().strftime('%H:%M:%S')
+                })
+                failed_count += 1
+            
+            with metrics_container:
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("✅ Sent", sent_count)
+                col2.metric("❌ Failed", failed_count)
+                col3.metric("⚠️ Invalid", invalid_count)
+                col4.metric("📊 Progress", f"{current_progress*100:.0f}%")
+            
+            time.sleep(0.5)  # Rate limiting
+        
+        progress_bar.progress(1.0)
+        status_text.success("🎉 Email campaign completed!")
         
         return pd.DataFrame(results)
 
 # ================================
-# FILE PROCESSOR
+# CONTACT DATA PROCESSOR
 # ================================
 
-class FileProcessor:
-    """Process files and extract contacts"""
+class ContactDataProcessor:
+    """Process contacts from multiple sources"""
     
     def __init__(self):
         self.personalizer = EmailPersonalizer()
     
     def process_file(self, uploaded_file):
-        """Process uploaded file and extract contacts"""
+        """Process uploaded CSV/Excel file"""
         try:
             file_extension = uploaded_file.name.split('.')[-1].lower()
             
@@ -647,31 +654,112 @@ class FileProcessor:
                 st.error("Please upload CSV or Excel files only")
                 return None
             
-            return self._process_dataframe(df)
+            return self._standardize_contacts(df)
             
         except Exception as e:
             st.error(f"Error processing file: {e}")
             return None
     
-    def _process_dataframe(self, df):
-        """Process dataframe and standardize columns"""
+    def process_bulk_paste(self, bulk_text):
+        """Process bulk pasted email data"""
+        try:
+            lines = bulk_text.strip().split('\n')
+            contacts = []
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Try to parse different formats
+                if ',' in line:
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 2:
+                        # Assume format: name, email or email, name
+                        email_part = parts[0] if '@' in parts[0] else parts[1]
+                        name_part = parts[1] if '@' in parts[0] else parts[0]
+                    else:
+                        email_part = parts[0]
+                        name_part = self.personalizer.extract_name_from_email(email_part)
+                elif '\t' in line:
+                    parts = [p.strip() for p in line.split('\t')]
+                    email_part = parts[0] if '@' in parts[0] else parts[1] if len(parts) > 1 else parts[0]
+                    name_part = parts[1] if '@' in parts[0] and len(parts) > 1 else self.personalizer.extract_name_from_email(email_part)
+                else:
+                    # Single email per line
+                    email_part = line
+                    name_part = self.personalizer.extract_name_from_email(email_part)
+                
+                # Validate email
+                try:
+                    validate_email(email_part)
+                    contacts.append({'email': email_part.lower(), 'name': name_part})
+                except EmailNotValidError:
+                    continue
+            
+            if not contacts:
+                st.error("No valid emails found in pasted text")
+                return None
+                
+            return pd.DataFrame(contacts)
+            
+        except Exception as e:
+            st.error(f"Error processing pasted data: {e}")
+            return None
+    
+    def process_google_forms(self, sheet_url):
+        """Process Google Forms/Sheets data"""
+        try:
+            # Extract sheet ID from URL
+            sheet_id = self._extract_sheet_id(sheet_url)
+            if not sheet_id:
+                st.error("Invalid Google Sheets URL")
+                return None
+            
+            # Create public CSV URL
+            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+            
+            # Read the CSV
+            df = pd.read_csv(csv_url)
+            
+            return self._standardize_contacts(df)
+            
+        except Exception as e:
+            st.error(f"Error accessing Google Sheet: {e}")
+            st.info("💡 Make sure the Google Sheet is publicly accessible (Anyone with link can view)")
+            return None
+    
+    def _extract_sheet_id(self, url):
+        """Extract sheet ID from Google Sheets URL"""
+        try:
+            if '/spreadsheets/d/' in url:
+                return url.split('/spreadsheets/d/')[1].split('/')[0]
+            return None
+        except:
+            return None
+    
+    def _standardize_contacts(self, df):
+        """Standardize contact data format"""
+        # Make column names lowercase for easier matching
         df.columns = df.columns.str.lower()
         
         email_col = None
         name_col = None
         
+        # Find email column
         for col in df.columns:
-            if 'email' in col or 'mail' in col:
+            if any(keyword in col for keyword in ['email', 'mail', 'e-mail']):
                 email_col = col
                 break
         
+        # Find name column
         for col in df.columns:
-            if 'name' in col or 'first' in col or 'last' in col:
+            if any(keyword in col for keyword in ['name', 'first', 'last', 'full']):
                 name_col = col
                 break
         
         if email_col is None:
-            st.error("❌ No email column found. Please ensure your file has an 'email' column.")
+            st.error("❌ No email column found. Please ensure your data has an 'email' column.")
             return None
         
         result_data = []
@@ -754,11 +842,12 @@ st.markdown("""
         font-weight: 600;
     }
     
-    .single-email-form {
+    .email-config-box {
         background: rgba(255,255,255,0.05);
         padding: 20px;
         border-radius: 10px;
         border: 1px solid rgba(255,255,255,0.1);
+        margin: 10px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -802,13 +891,8 @@ def main():
         else:
             st.error("🤖 Groq AI: Not configured")
         
-        if GMAIL_EMAIL and GMAIL_APP_PASSWORD:
-            st.success("📧 Email Service: Connected")
-        else:
-            st.error("📧 Email Service: Not configured")
-        
         if HUGGING_FACE_TOKEN:
-            st.success("🎨 Image Generator: Connected (API)")
+            st.success("🎨 Image Generator: Connected")
         else:
             st.warning("🎨 Image Generator: Not configured")
         
@@ -915,8 +999,6 @@ def show_campaign_dashboard():
         
         # Try API first, fallback to placeholder
         image = image_gen.generate_campaign_image_via_api(campaign_desc, "professional")
-        if image is None:
-            image_gen.generate_placeholder_image(campaign_desc)
     
     # Display existing campaign
     if st.session_state.campaign_blueprint:
@@ -942,7 +1024,7 @@ def show_campaign_dashboard():
                     use_container_width=True)
 
 def show_email_marketing():
-    """Email marketing page with both bulk and single email capabilities"""
+    """Enhanced email marketing page with yagmail integration"""
     
     st.header("📧 Comprehensive Email Marketing Center")
     
@@ -1013,133 +1095,123 @@ def show_email_marketing():
     
     st.markdown("---")
     
-    # SINGLE EMAIL SECTION
-    st.subheader("📧 Send Single Email")
+    # EMAIL CONFIGURATION SECTION
+    st.subheader("📧 Email Configuration")
+    st.markdown('<div class="email-config-box">', unsafe_allow_html=True)
     
-    with st.expander("📨 Single Email Sender", expanded=False):
-        st.markdown('<div class="single-email-form">', unsafe_allow_html=True)
-        
-        with st.form("single_email_form"):
-            single_col1, single_col2 = st.columns(2)
-            
-            with single_col1:
-                single_email = st.text_input("📧 Recipient Email Address")
-                single_name = st.text_input("👤 Recipient Name", 
-                    help="Leave empty to auto-extract from email")
-                single_subject = st.text_input("📝 Email Subject Line")
-            
-            with single_col2:
-                use_template = st.checkbox("📄 Use Generated Template", 
-                    value=bool(st.session_state.email_template_html or st.session_state.email_template_text))
-                
-                if use_template and (st.session_state.email_template_html or st.session_state.email_template_text):
-                    if st.session_state.email_template_html and st.session_state.email_template_text:
-                        template_choice = st.radio("Choose Template:", ["HTML", "Plain Text"])
-                        single_body = st.session_state.email_template_html if template_choice == "HTML" else st.session_state.email_template_text
-                        single_is_html = template_choice == "HTML"
-                    elif st.session_state.email_template_html:
-                        single_body = st.session_state.email_template_html
-                        single_is_html = True
-                        st.info("Using HTML template")
-                    else:
-                        single_body = st.session_state.email_template_text
-                        single_is_html = False
-                        st.info("Using plain text template")
+    config_col1, config_col2 = st.columns(2)
+    
+    with config_col1:
+        sender_email = st.text_input("📧 Company Gmail Address", placeholder="your-company@gmail.com")
+    with config_col2:
+        sender_password = st.text_input("🔑 Gmail App Password", type="password", 
+                                       help="Generate app password from Gmail settings")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Test email configuration
+    if sender_email and sender_password:
+        if st.button("🔍 Test Email Configuration"):
+            try:
+                yag_handler = YagmailHandler(sender_email, sender_password)
+                success, msg = yag_handler.initialize_connection()
+                if success:
+                    st.success("✅ Email configuration successful!")
                 else:
-                    single_body = ""
-                    single_is_html = False
-            
-            if not use_template or not single_body:
-                single_body = st.text_area("📧 Email Content", 
-                    value=single_body,
-                    placeholder="Enter your email content here...",
-                    height=200,
-                    help="Use {{first_name}}, {{name}}, and {{email}} for personalization")
-                single_is_html = st.checkbox("📄 Send as HTML", value=single_is_html)
-            else:
-                st.text_area("📧 Email Content Preview", 
-                    value=single_body[:200] + "..." if len(single_body) > 200 else single_body,
-                    height=100, disabled=True)
-            
-            send_single = st.form_submit_button("📧 Send Single Email", use_container_width=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        if send_single and single_email and single_subject and single_body:
-            if not GMAIL_EMAIL or not GMAIL_APP_PASSWORD:
-                st.error("❌ Gmail configuration missing!")
-                st.error("Please configure GMAIL_EMAIL and GMAIL_APP_PASSWORD in Streamlit secrets")
-            else:
-                try:
-                    email_handler = EmailHandler()
-                    personalizer = EmailPersonalizer()
-                    
-                    final_name = single_name if single_name else personalizer.extract_name_from_email(single_email)
-                    final_subject = personalizer.personalize_template(single_subject, final_name, single_email)
-                    final_body = personalizer.personalize_template(single_body, final_name, single_email)
-                    
-                    with st.spinner(f"📧 Sending email to {single_email}..."):
-                        success, error_msg = email_handler.send_single_email(single_email, final_subject, final_body, single_is_html)
-                    
-                    if success:
-                        st.success(f"✅ Email sent successfully to {final_name} ({single_email})!")
-                    else:
-                        st.error(f"❌ Failed to send email: {error_msg}")
-                        
-                except Exception as e:
-                    st.error(f"❌ Unexpected error: {str(e)}")
-        elif send_single:
-            st.error("⚠️ Please fill in all required fields (email, subject, and content)")
+                    st.error(f"❌ Email configuration failed: {msg}")
+            except Exception as e:
+                st.error(f"❌ Configuration error: {str(e)}")
     
     st.markdown("---")
     
-    # BULK EMAIL SECTION
-    st.subheader("👥 Bulk Email Campaign")
+    # CONTACT DATA SECTION
+    st.subheader("👥 Contact Data Management")
     
-    uploaded_file = st.file_uploader("📁 Upload Contact File (CSV/Excel)", 
-        type=['csv', 'xlsx'], key="contact_upload",
-        help="Upload a CSV or Excel file with 'email' and optionally 'name' columns")
+    # Multiple ways to add contacts
+    contact_method = st.radio("📥 Choose Contact Input Method:", 
+                             ["📁 Upload File (CSV/Excel)", "📋 Bulk Paste", "🌐 Google Forms/Sheets"])
     
-    if uploaded_file:
-        processor = FileProcessor()
-        contacts = processor.process_file(uploaded_file)
+    if contact_method == "📁 Upload File (CSV/Excel)":
+        uploaded_file = st.file_uploader("Upload Contact File", 
+                                       type=['csv', 'xlsx'], 
+                                       help="Upload a CSV or Excel file with 'email' and 'name' columns")
         
-        if contacts is not None:
-            st.session_state.email_contacts = contacts
-            st.success(f"✅ Successfully loaded {len(contacts)} valid contacts!")
+        if uploaded_file:
+            processor = ContactDataProcessor()
+            contacts = processor.process_file(uploaded_file)
             
-            st.subheader("📋 Contact List Editor")
-            edited_contacts = st.data_editor(
-                contacts,
-                column_config={
-                    "email": st.column_config.TextColumn("📧 Email Address", width="medium"),
-                    "name": st.column_config.TextColumn("👤 Full Name", width="medium")
-                },
-                num_rows="dynamic",
-                use_container_width=True,
-                key="contact_editor"
-            )
-            st.session_state.email_contacts = edited_contacts
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("👥 Total Contacts", len(edited_contacts))
-            with col2:
-                domains = edited_contacts['email'].str.split('@').str[1].nunique()
-                st.metric("🏢 Unique Domains", domains)
-            with col3:
-                avg_name_length = edited_contacts['name'].str.len().mean()
-                st.metric("📝 Avg Name Length", f"{avg_name_length:.0f} chars")
+            if contacts is not None:
+                st.session_state.email_contacts = contacts
+                st.success(f"✅ Successfully loaded {len(contacts)} valid contacts!")
     
-    # Bulk email campaign launch
+    elif contact_method == "📋 Bulk Paste":
+        st.info("💡 Paste email addresses or email,name pairs (one per line)")
+        bulk_text = st.text_area("Paste Contact Data:", 
+                                height=200,
+                                placeholder="""john.doe@example.com, John Doe
+jane.smith@example.com, Jane Smith
+mark.wilson@example.com""")
+        
+        if st.button("🔄 Process Pasted Data") and bulk_text:
+            processor = ContactDataProcessor()
+            contacts = processor.process_bulk_paste(bulk_text)
+            
+            if contacts is not None:
+                st.session_state.email_contacts = contacts
+                st.success(f"✅ Successfully processed {len(contacts)} valid contacts!")
+    
+    elif contact_method == "🌐 Google Forms/Sheets":
+        st.info("💡 Make sure your Google Sheet is publicly accessible (Anyone with link can view)")
+        sheet_url = st.text_input("Google Sheets URL:", 
+                                 placeholder="https://docs.google.com/spreadsheets/d/your-sheet-id/edit#gid=0")
+        
+        if st.button("📊 Load from Google Sheets") and sheet_url:
+            processor = ContactDataProcessor()
+            contacts = processor.process_google_forms(sheet_url)
+            
+            if contacts is not None:
+                st.session_state.email_contacts = contacts
+                st.success(f"✅ Successfully loaded {len(contacts)} contacts from Google Sheets!")
+    
+    # Show and edit contacts if available
+    if st.session_state.email_contacts is not None:
+        st.markdown("---")
+        st.subheader("📋 Contact List Editor")
+        
+        edited_contacts = st.data_editor(
+            st.session_state.email_contacts,
+            column_config={
+                "email": st.column_config.TextColumn("📧 Email Address", width="medium"),
+                "name": st.column_config.TextColumn("👤 Full Name", width="medium")
+            },
+            num_rows="dynamic",
+            use_container_width=True,
+            key="contact_editor"
+        )
+        st.session_state.email_contacts = edited_contacts
+        
+        # Contact statistics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("👥 Total Contacts", len(edited_contacts))
+        with col2:
+            domains = edited_contacts['email'].str.split('@').str[1].nunique()
+            st.metric("🏢 Unique Domains", domains)
+        with col3:
+            avg_name_length = edited_contacts['name'].str.len().mean()
+            st.metric("📝 Avg Name Length", f"{avg_name_length:.0f} chars")
+    
+    # EMAIL CAMPAIGN SECTION
     if (st.session_state.email_contacts is not None and 
-        (st.session_state.email_template_html or st.session_state.email_template_text)):
+        (st.session_state.email_template_html or st.session_state.email_template_text) and
+        sender_email and sender_password):
         
         st.markdown("---")
-        st.subheader("🚀 Launch Bulk Email Campaign")
+        st.subheader("🚀 Launch Email Campaign")
         
         df = st.session_state.email_contacts
         
+        # Campaign overview
         st.markdown("### 📊 Campaign Overview")
         overview_col1, overview_col2, overview_col3, overview_col4 = st.columns(4)
         
@@ -1151,109 +1223,131 @@ def show_email_marketing():
         with overview_col3:
             st.metric("📧 Template", "✅ Ready")
         with overview_col4:
-            estimated_time = len(df) * 1.5 / 60
+            estimated_time = len(df) * 1 / 60
             st.metric("⏱️ Est. Time", f"{estimated_time:.0f}m")
         
+        # Campaign configuration
         config_col1, config_col2 = st.columns(2)
         
         with config_col1:
             bulk_subject = st.text_input("📧 Campaign Subject Line", 
                 value="Important message for {{first_name}}")
-            test_email = st.text_input("🧪 Test Email Address", placeholder="your@email.com")
+            test_email = st.text_input("🧪 Test Email Address", placeholder="test@email.com")
         
         with config_col2:
             if st.session_state.email_template_html and st.session_state.email_template_text:
                 send_format = st.radio("📝 Send As:", ["HTML", "Plain Text"])
                 template_to_use = st.session_state.email_template_html if send_format == "HTML" else st.session_state.email_template_text
-                is_html = send_format == "HTML"
             elif st.session_state.email_template_html:
                 template_to_use = st.session_state.email_template_html
-                is_html = True
                 st.info("✅ HTML template ready")
             else:
                 template_to_use = st.session_state.email_template_text
-                is_html = False
                 st.info("✅ Plain text template ready")
         
+        # Test email functionality
         if test_email and st.button("🧪 Send Test Email"):
-            email_handler = EmailHandler()
-            personalizer = EmailPersonalizer()
-            
-            test_content = personalizer.personalize_template(template_to_use, "Test User", test_email)
-            test_subject = personalizer.personalize_template(bulk_subject, "Test User", test_email)
-            
-            with st.spinner(f"🧪 Sending test email to {test_email}..."):
-                success, error_msg = email_handler.send_single_email(test_email, test_subject, test_content, is_html)
-            
-            if success:
-                st.success("✅ Test email sent successfully!")
-            else:
-                st.error(f"❌ Test failed: {error_msg}")
+            try:
+                yag_handler = YagmailHandler(sender_email, sender_password)
+                personalizer = EmailPersonalizer()
+                
+                test_content = personalizer.personalize_template(template_to_use, "Test User", test_email)
+                test_subject = personalizer.personalize_template(bulk_subject, "Test User", test_email)
+                
+                with st.spinner(f"🧪 Sending test email to {test_email}..."):
+                    success, error_msg = yag_handler.send_single_email(test_email, test_subject, test_content)
+                
+                if success:
+                    st.success("✅ Test email sent successfully!")
+                else:
+                    st.error(f"❌ Test failed: {error_msg}")
+                    
+            except Exception as e:
+                st.error(f"❌ Test error: {str(e)}")
         
+        # Bulk campaign launch
         st.markdown("### 🎯 Campaign Launch")
         
         if st.button("🚀 LAUNCH BULK EMAIL CAMPAIGN", type="primary", use_container_width=True):
-            if not GMAIL_EMAIL or not GMAIL_APP_PASSWORD:
-                st.error("❌ Gmail configuration missing!")
-                st.error("Please configure GMAIL_EMAIL and GMAIL_APP_PASSWORD in Streamlit secrets")
-                st.stop()
-            
-            st.warning(f"⚠️ About to send {len(df)} personalized emails. This action cannot be undone!")
+            st.warning(f"⚠️ About to send {len(df)} personalized emails using yagmail. This action cannot be undone!")
             
             if st.button("✅ CONFIRM & SEND ALL EMAILS"):
-                st.info("🚀 Starting bulk email campaign...")
+                st.info("🚀 Starting bulk email campaign with yagmail...")
                 
-                email_handler = EmailHandler()
-                personalizer = EmailPersonalizer()
-                
-                results = email_handler.send_bulk_emails(
-                    df, bulk_subject, template_to_use, personalizer, is_html
-                )
-                
-                if not results.empty:
-                    success_count = len(results[results['status'] == 'sent'])
-                    failed_count = len(results[results['status'] == 'failed'])
-                    invalid_count = len(results[results['status'] == 'invalid'])
-                    success_rate = (success_count / len(results)) * 100
+                try:
+                    yag_handler = YagmailHandler(sender_email, sender_password)
+                    personalizer = EmailPersonalizer()
                     
-                    st.markdown("### 🎉 Campaign Results")
-                    
-                    result_col1, result_col2, result_col3, result_col4 = st.columns(4)
-                    
-                    with result_col1:
-                        st.markdown(f'<div class="success-metric">✅ Successfully Sent<br><h2>{success_count}</h2></div>', unsafe_allow_html=True)
-                    with result_col2:
-                        st.metric("❌ Failed", failed_count)
-                    with result_col3:
-                        st.metric("⚠️ Invalid", invalid_count)
-                    with result_col4:
-                        st.metric("📊 Success Rate", f"{success_rate:.1f}%")
-                    
-                    st.session_state.campaign_results = results
-                    
-                    csv_data = results.to_csv(index=False)
-                    st.download_button(
-                        "📥 Download Campaign Results",
-                        data=csv_data,
-                        file_name=f"bulk_email_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv",
-                        use_container_width=True
+                    results = yag_handler.send_bulk_emails(
+                        df, bulk_subject, template_to_use, personalizer
                     )
                     
-                    with st.expander("📋 View Detailed Campaign Results"):
-                        st.dataframe(results, use_container_width=True)
+                    if not results.empty:
+                        success_count = len(results[results['status'] == 'sent'])
+                        failed_count = len(results[results['status'] == 'failed'])
+                        invalid_count = len(results[results['status'] == 'invalid'])
+                        success_rate = (success_count / len(results)) * 100
+                        
+                        st.markdown("### 🎉 Campaign Results")
+                        
+                        result_col1, result_col2, result_col3, result_col4 = st.columns(4)
+                        
+                        with result_col1:
+                            st.markdown(f'<div class="success-metric">✅ Successfully Sent<br><h2>{success_count}</h2></div>', unsafe_allow_html=True)
+                        with result_col2:
+                            st.metric("❌ Failed", failed_count)
+                        with result_col3:
+                            st.metric("⚠️ Invalid", invalid_count)
+                        with result_col4:
+                            st.metric("📊 Success Rate", f"{success_rate:.1f}%")
+                        
+                        st.session_state.campaign_results = results
+                        
+                        csv_data = results.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download Campaign Results",
+                            data=csv_data,
+                            file_name=f"yagmail_campaign_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+                        
+                        with st.expander("📋 View Detailed Campaign Results"):
+                            st.dataframe(results, use_container_width=True)
+                        
+                        if success_count > 0:
+                            st.balloons()
                     
-                    if success_count > 0:
-                        st.balloons()
-                
-                else:
-                    st.error("❌ Campaign failed - no results generated")
+                    else:
+                        st.error("❌ Campaign failed - no results generated")
+                        
+                except Exception as e:
+                    st.error(f"❌ Campaign error: {str(e)}")
+    
+    elif st.session_state.email_contacts is not None and (st.session_state.email_template_html or st.session_state.email_template_text):
+        st.warning("⚠️ Please configure your email settings above to launch campaigns")
+    
+    elif sender_email and sender_password:
+        st.info("💡 Load some contacts and generate an email template to start your campaign!")
+    
+    else:
+        st.info("""
+        📧 **Getting Started with Email Marketing:**
+        
+        1. **Configure Email Settings** - Enter your company Gmail and app password
+        2. **Generate Email Template** - Use AI to create professional templates
+        3. **Load Contacts** - Upload files, paste data, or connect to Google Forms
+        4. **Launch Campaign** - Send personalized bulk emails with tracking
+        
+        All emails are sent using **yagmail** for reliable delivery!
+        """)
 
 def show_analytics_reports():
-    """Analytics and reporting page"""
+    """Analytics and reporting page with enhanced features"""
     
     st.header("📊 Campaign Analytics & Performance Reports")
     
+    # Campaign geographic analysis
     if st.session_state.current_campaign:
         st.subheader("🗺️ Campaign Geographic Analysis")
         
@@ -1302,6 +1396,7 @@ def show_analytics_reports():
             with col4:
                 st.metric("📅 Duration", campaign.get('duration', 'TBD'))
         
+        # Campaign projections
         if campaign.get('budget') and campaign['budget'].isdigit():
             st.subheader("📈 Campaign Performance Projections")
             
@@ -1339,6 +1434,7 @@ def show_analytics_reports():
             fig.update_layout(template="plotly_dark")
             st.plotly_chart(fig, use_container_width=True)
     
+    # Display generated images
     if st.session_state.generated_images:
         st.markdown("---")
         st.subheader("🎨 Generated Campaign Images")
@@ -1348,11 +1444,12 @@ def show_analytics_reports():
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
-                    st.image(img_data['image'], caption=f"Campaign Image {i+1}: {img_data['campaign']}", use_column_width=True)
+                    st.image(img_data['image'], caption=f"Campaign Image {i+1}: {img_data['campaign']}", use_container_width=True)
                 
                 with col2:
                     st.write(f"**Generated:** {img_data['timestamp'].strftime('%Y-%m-%d %H:%M')}")
                     st.write(f"**Campaign:** {img_data['campaign']}")
+                    st.write(f"**Model:** {img_data.get('model', 'Unknown')}")
                     
                     img_bytes = io.BytesIO()
                     img_data['image'].save(img_bytes, format='PNG')
@@ -1366,6 +1463,7 @@ def show_analytics_reports():
                         use_container_width=True
                     )
     
+    # Email campaign results
     if st.session_state.campaign_results is not None:
         st.markdown("---")
         st.subheader("📧 Email Campaign Performance Analysis")
@@ -1445,7 +1543,7 @@ def show_analytics_reports():
         - Estimated reach and conversion metrics
         
         **📧 Email Campaign Analytics:**
-        - Real-time delivery tracking
+        - Real-time delivery tracking with yagmail
         - Success rate analysis
         - Domain performance breakdown
         
