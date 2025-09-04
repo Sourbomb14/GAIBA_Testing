@@ -8,5 +8,3 @@ requests
 Pillow
 openpyxl
 yagmail
-PyPDF2
-python-docx
