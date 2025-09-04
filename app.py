@@ -331,9 +331,9 @@ class ExternalImageGenerator:
             
         # Try multiple models in order of preference
         models_to_try = [
-            "runwayml/stable-diffusion-v1-5",
-            "CompVis/stable-diffusion-v1-4",
-            "stabilityai/stable-diffusion-2-1"
+            "stable-diffusion-v1-5/stable-diffusion-v1-5",
+            "black-forest-labs/FLUX.1-dev",
+            "stabilityai/stable-diffusion-xl-base-1.0"
         ]
         
         enhanced_prompt = f"Professional marketing campaign image for {campaign_description}, {style} style, high quality, vibrant colors, modern design, commercial photography, eye-catching, brand advertisement, 4K resolution, clean layout"
