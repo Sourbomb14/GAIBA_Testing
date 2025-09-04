@@ -17,8 +17,6 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
 import csv
-import PyPDF2
-import docx
 
 # Configuration using Streamlit Secrets
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
@@ -125,23 +123,21 @@ class GroqCampaignGenerator:
             return self._fallback_email_template(template_type, tone, format_type)
         
         try:
-            prompt = f"""
-            Create a professional {template_type.lower()} email template with a {tone.lower()} tone.
-            Format: {format_type}
-            
-            Campaign Context: {campaign_context if campaign_context else 'General marketing campaign'}
-            
-            Requirements:
-            1. Include personalization placeholders: {{{{first_name}}}}, {{{{name}}}}, {{{{email}}}}
-            2. Make it engaging and action-oriented
-            3. Include a clear call-to-action
-            4. Use modern, professional design
-            5. Make it mobile-friendly
-            6. IMPORTANT: Do NOT include any instructions, explanations, or meta-text in the output
-            7. ONLY provide the clean template content that can be used directly
-            
-            {"Generate HTML email with inline CSS styling - ONLY the HTML code" if format_type == "HTML" else "Generate plain text email with proper formatting - ONLY the email text"}
-            """
+            prompt = f"""Create a professional {template_type.lower()} email template with a {tone.lower()} tone.
+Format: {format_type}
+
+Campaign Context: {campaign_context if campaign_context else 'General marketing campaign'}
+
+Requirements:
+1. Include personalization placeholders: {{{{first_name}}}}, {{{{name}}}}, {{{{email}}}}
+2. Make it engaging and action-oriented
+3. Include a clear call-to-action
+4. Use modern, professional design
+5. Make it mobile-friendly
+6. IMPORTANT: Do NOT include any instructions, explanations, or meta-text in the output
+7. ONLY provide the clean template content that can be used directly
+
+{"Generate HTML email with inline CSS styling - ONLY the HTML code" if format_type == "HTML" else "Generate plain text email with proper formatting - ONLY the email text"}"""
             
             response = self.client.chat.completions.create(
                 messages=[
@@ -183,30 +179,28 @@ class GroqCampaignGenerator:
             
             sample_data = df_sample.head(10).to_dict(orient='records')
             
-            prompt = f"""
-            You are a professional data analyst. Analyze the following dataset:
-            
-            FILE INFO: {file_info}
-            SAMPLE DATA (first 10 rows):
-            {json.dumps(sample_data, indent=2, default=safe_json_serializable)}
-            
-            DATASET SHAPE: {df_sample.shape[0]} rows, {df_sample.shape[1]} columns
-            COLUMNS: {list(df_sample.columns)}
-            
-            Please provide a comprehensive analysis including:
-            
-            1. **DATA SUMMARY & STATISTICS**
-            2. **KEY INSIGHTS & TRENDS**
-            3. **RECOMMENDED VISUALIZATIONS**
-               - Suggest specific chart types for the data
-               - Recommend columns to visualize together
-            4. **DATA QUALITY ASSESSMENT**
-            5. **BUSINESS RECOMMENDATIONS**
-               - Actionable insights for management
-               - Strategic recommendations based on the data
-            
-            Format your response with clear headings and bullet points for easy reading.
-            """
+            prompt = f"""You are a professional data analyst. Analyze the following dataset:
+
+FILE INFO: {file_info}
+SAMPLE DATA (first 10 rows):
+{json.dumps(sample_data, indent=2, default=safe_json_serializable)}
+
+DATASET SHAPE: {df_sample.shape[0]} rows, {df_sample.shape[1]} columns
+COLUMNS: {list(df_sample.columns)}
+
+Please provide a comprehensive analysis including:
+
+1. **DATA SUMMARY & STATISTICS**
+2. **KEY INSIGHTS & TRENDS**
+3. **RECOMMENDED VISUALIZATIONS**
+   - Suggest specific chart types for the data
+   - Recommend columns to visualize together
+4. **DATA QUALITY ASSESSMENT**
+5. **BUSINESS RECOMMENDATIONS**
+   - Actionable insights for management
+   - Strategic recommendations based on the data
+
+Format your response with clear headings and bullet points for easy reading."""
             
             response = self.client.chat.completions.create(
                 messages=[
@@ -232,42 +226,44 @@ class GroqCampaignGenerator:
     
     def _build_campaign_prompt(self, data):
         """Build comprehensive campaign prompt with visual elements"""
-        return f"""
-        Create a comprehensive, actionable marketing campaign strategy for:
+        prompt_text = f"""Create a comprehensive, actionable marketing campaign strategy for:
+
+**CAMPAIGN DETAILS:**
+- Company: {data.get('company_name', 'Company')}
+- Campaign Type: {data.get('campaign_type', 'Marketing Campaign')}
+- Target Audience: {data.get('target_audience', 'General audience')}
+- Geographic Focus: {data.get('location', 'Global')} {data.get('city_state', '')}
+- Marketing Channels: {', '.join(data.get('channels', ['Email']))}
+- Budget: {data.get('budget', 'TBD')} {data.get('currency', 'USD')}
+- Duration: {data.get('duration', 'TBD')}
+- Customer Segment: {data.get('customer_segment', 'Mass Market')}
+- Product/Service: {data.get('product_description', 'Product/Service')}
+
+**DELIVERABLES REQUIRED:**
+Create a comprehensive strategy with visual elements including:
+1. **📊 Executive Summary** with key metrics visualization
+2. **👥 Market Analysis** with audience breakdown tables
+3. **🎯 Competitive Positioning** with comparison charts
+4. **💬 Messaging Strategy** with key themes
+5. **📱 Channel-Specific Tactics** with implementation timeline
+6. **📝 Content Strategy** with content calendar
+7. **📅 Timeline & Milestones** with visual project roadmap
+8. **💰 Budget Allocation** with spending breakdown charts
+9. **📈 Success Metrics & KPIs** with measurement framework
+10. **⚠️ Risk Management** with mitigation strategies
+11. **🚀 Next Steps** with priority action items
+
+Use emojis, tables, charts descriptions, and structured layouts to make it visually appealing and easy to read.
+Make this practical, specific, and actionable with real tactics and numbers."""
         
-        **CAMPAIGN DETAILS:**
-        - Company: {data.get('company_name', 'Company')}
-        - Campaign Type: {data.get('campaign_type', 'Marketing Campaign')}
-        - Target Audience: {data.get('target_audience', 'General audience')}
-        - Geographic Focus: {data.get('location', 'Global')} {data.get('city_state', '')}
-        - Marketing Channels: {', '.join(data.get('channels', ['Email']))}
-        - Budget: {data.get('budget', 'TBD')} {data.get('currency', 'USD')}
-        - Duration: {data.get('duration', 'TBD')}
-        - Customer Segment: {data.get('customer_segment', 'Mass Market')}
-        - Product/Service: {data.get('product_description', 'Product/Service')}
-        
-        **DELIVERABLES REQUIRED:**
-        Create a comprehensive strategy with visual elements including:
-        1. **📊 Executive Summary** with key metrics visualization
-        2. **👥 Market Analysis** with audience breakdown tables
-        3. **🎯 Competitive Positioning** with comparison charts
-        4. **💬 Messaging Strategy** with key themes
-        5. **📱 Channel-Specific Tactics** with implementation timeline
-        6. **📝 Content Strategy** with content calendar
-        7. **📅 Timeline & Milestones** with visual project roadmap
-        8. **💰 Budget Allocation** with spending breakdown charts
-        9. **📈 Success Metrics & KPIs** with measurement framework
-        10. **⚠️ Risk Management** with mitigation strategies
-        11. **🚀 Next Steps** with priority action items
-        
-        Use emojis, tables, charts descriptions, and structured layouts to make it visually appealing and easy to read.
-        Make this practical, specific, and actionable with real tactics and numbers.
-        """
+        return prompt_text
     
     def _fallback_strategy(self, data):
         """Enhanced fallback campaign strategy with visual elements"""
-        return f"""
-# 🚀 {data.get('company_name', 'Your Company')} - {data.get('campaign_type', 'Marketing')} Campaign Strategy
+        budget_val = data.get('budget', '10000')
+        budget_num = int(budget_val) if budget_val.isdigit() else 10000
+        
+        strategy_text = f"""# 🚀 {data.get('company_name', 'Your Company')} - {data.get('campaign_type', 'Marketing')} Campaign Strategy
 
 ## 📊 Executive Summary
 | Metric | Value |
