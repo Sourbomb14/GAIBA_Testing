@@ -3,13 +3,10 @@ pandas
 numpy
 plotly
 email-validator
-python-dotenv
 groq
 requests
 Pillow
 openpyxl
-diffusers
-torch
-torchvision
-transformers
-accelerate
+yagmail
+gspread
+oauth2client
