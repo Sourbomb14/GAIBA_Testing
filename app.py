@@ -11,7 +11,6 @@ import plotly.graph_objects as go
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email_validator import validate_email, EmailNotValidError
-from dotenv import load_dotenv
 import os
 from datetime import datetime, timedelta
 import io
@@ -20,17 +19,14 @@ from groq import Groq
 import requests
 from PIL import Image
 
-# Load environment variables
-load_dotenv()
-
-# Configuration - Updated based on your .env
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-GMAIL_EMAIL = os.getenv("GMAIL_EMAIL")
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
+# Configuration using Streamlit Secrets
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+GROQ_MODEL = st.secrets.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GMAIL_EMAIL = st.secrets["GMAIL_EMAIL"]
+GMAIL_APP_PASSWORD = st.secrets["GMAIL_APP_PASSWORD"]
+SMTP_SERVER = st.secrets.get("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(st.secrets.get("SMTP_PORT", 587))
+HUGGING_FACE_TOKEN = st.secrets.get("HUGGING_FACE_TOKEN", "")
 
 # Countries and Currencies data
 COUNTRIES_DATA = {
@@ -321,11 +317,11 @@ You received this email because you're subscribed to our updates.
 """
 
 # ================================
-# ALTERNATIVE IMAGE GENERATOR USING EXTERNAL APIs
+# EXTERNAL IMAGE GENERATOR USING APIs
 # ================================
 
 class ExternalImageGenerator:
-    """Generate images using external APIs (no diffusers dependency)"""
+    """Generate images using external APIs (Streamlit Cloud compatible)"""
     
     def __init__(self):
         self.hugging_face_token = HUGGING_FACE_TOKEN
@@ -407,11 +403,11 @@ class ExternalImageGenerator:
             
             # Create a placeholder image
             width, height = 512, 512
-            image = Image.new('RGB', (width, height), color='#f0f0f0')
+            image = Image.new('RGB', (width, height), color='#4a90e2')
             draw = ImageDraw.Draw(image)
             
             # Add campaign text
-            text = f"Campaign Image\n{campaign_description[:50]}..."
+            text = f"🚀 Campaign Image\n\n{campaign_description[:50]}..."
             
             try:
                 # Try to use a nice font
@@ -428,7 +424,7 @@ class ExternalImageGenerator:
             y = (height - text_height) // 2
             
             # Draw text
-            draw.text((x, y), text, fill='#333333', font=font, anchor="la")
+            draw.text((x, y), text, fill='white', font=font, anchor="la")
             
             # Store in session state
             image_data = {
@@ -505,7 +501,7 @@ class EmailHandler:
     def send_single_email(self, to_email, subject, body, is_html=True):
         """Send a single email with detailed error handling"""
         if not self.email or not self.password:
-            return False, "Gmail credentials not configured in .env file"
+            return False, "Gmail credentials not configured in Streamlit secrets"
             
         try:
             msg = MIMEMultipart('alternative')
@@ -537,11 +533,7 @@ class EmailHandler:
         """WORKING bulk email sending function"""
         if not self.email or not self.password:
             st.error("❌ Gmail configuration missing!")
-            st.code("""
-# Add to .env file:
-GMAIL_EMAIL=your_email@gmail.com
-GMAIL_APP_PASSWORD=your_16_digit_app_password
-            """)
+            st.error("Please configure GMAIL_EMAIL and GMAIL_APP_PASSWORD in Streamlit secrets")
             return pd.DataFrame()
         
         total_emails = len(email_list)
@@ -924,7 +916,6 @@ def show_campaign_dashboard():
         # Try API first, fallback to placeholder
         image = image_gen.generate_campaign_image_via_api(campaign_desc, "professional")
         if image is None:
-            # Fallback to placeholder
             image_gen.generate_placeholder_image(campaign_desc)
     
     # Display existing campaign
@@ -1077,11 +1068,7 @@ def show_email_marketing():
         if send_single and single_email and single_subject and single_body:
             if not GMAIL_EMAIL or not GMAIL_APP_PASSWORD:
                 st.error("❌ Gmail configuration missing!")
-                st.code("""
-# Add to .env file:
-GMAIL_EMAIL=your_email@gmail.com
-GMAIL_APP_PASSWORD=your_16_digit_app_password
-                """)
+                st.error("Please configure GMAIL_EMAIL and GMAIL_APP_PASSWORD in Streamlit secrets")
             else:
                 try:
                     email_handler = EmailHandler()
@@ -1171,4 +1158,303 @@ GMAIL_APP_PASSWORD=your_16_digit_app_password
         
         with config_col1:
             bulk_subject = st.text_input("📧 Campaign Subject Line", 
-                value="Important
+                value="Important message for {{first_name}}")
+            test_email = st.text_input("🧪 Test Email Address", placeholder="your@email.com")
+        
+        with config_col2:
+            if st.session_state.email_template_html and st.session_state.email_template_text:
+                send_format = st.radio("📝 Send As:", ["HTML", "Plain Text"])
+                template_to_use = st.session_state.email_template_html if send_format == "HTML" else st.session_state.email_template_text
+                is_html = send_format == "HTML"
+            elif st.session_state.email_template_html:
+                template_to_use = st.session_state.email_template_html
+                is_html = True
+                st.info("✅ HTML template ready")
+            else:
+                template_to_use = st.session_state.email_template_text
+                is_html = False
+                st.info("✅ Plain text template ready")
+        
+        if test_email and st.button("🧪 Send Test Email"):
+            email_handler = EmailHandler()
+            personalizer = EmailPersonalizer()
+            
+            test_content = personalizer.personalize_template(template_to_use, "Test User", test_email)
+            test_subject = personalizer.personalize_template(bulk_subject, "Test User", test_email)
+            
+            with st.spinner(f"🧪 Sending test email to {test_email}..."):
+                success, error_msg = email_handler.send_single_email(test_email, test_subject, test_content, is_html)
+            
+            if success:
+                st.success("✅ Test email sent successfully!")
+            else:
+                st.error(f"❌ Test failed: {error_msg}")
+        
+        st.markdown("### 🎯 Campaign Launch")
+        
+        if st.button("🚀 LAUNCH BULK EMAIL CAMPAIGN", type="primary", use_container_width=True):
+            if not GMAIL_EMAIL or not GMAIL_APP_PASSWORD:
+                st.error("❌ Gmail configuration missing!")
+                st.error("Please configure GMAIL_EMAIL and GMAIL_APP_PASSWORD in Streamlit secrets")
+                st.stop()
+            
+            st.warning(f"⚠️ About to send {len(df)} personalized emails. This action cannot be undone!")
+            
+            if st.button("✅ CONFIRM & SEND ALL EMAILS"):
+                st.info("🚀 Starting bulk email campaign...")
+                
+                email_handler = EmailHandler()
+                personalizer = EmailPersonalizer()
+                
+                results = email_handler.send_bulk_emails(
+                    df, bulk_subject, template_to_use, personalizer, is_html
+                )
+                
+                if not results.empty:
+                    success_count = len(results[results['status'] == 'sent'])
+                    failed_count = len(results[results['status'] == 'failed'])
+                    invalid_count = len(results[results['status'] == 'invalid'])
+                    success_rate = (success_count / len(results)) * 100
+                    
+                    st.markdown("### 🎉 Campaign Results")
+                    
+                    result_col1, result_col2, result_col3, result_col4 = st.columns(4)
+                    
+                    with result_col1:
+                        st.markdown(f'<div class="success-metric">✅ Successfully Sent<br><h2>{success_count}</h2></div>', unsafe_allow_html=True)
+                    with result_col2:
+                        st.metric("❌ Failed", failed_count)
+                    with result_col3:
+                        st.metric("⚠️ Invalid", invalid_count)
+                    with result_col4:
+                        st.metric("📊 Success Rate", f"{success_rate:.1f}%")
+                    
+                    st.session_state.campaign_results = results
+                    
+                    csv_data = results.to_csv(index=False)
+                    st.download_button(
+                        "📥 Download Campaign Results",
+                        data=csv_data,
+                        file_name=f"bulk_email_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                    
+                    with st.expander("📋 View Detailed Campaign Results"):
+                        st.dataframe(results, use_container_width=True)
+                    
+                    if success_count > 0:
+                        st.balloons()
+                
+                else:
+                    st.error("❌ Campaign failed - no results generated")
+
+def show_analytics_reports():
+    """Analytics and reporting page"""
+    
+    st.header("📊 Campaign Analytics & Performance Reports")
+    
+    if st.session_state.current_campaign:
+        st.subheader("🗺️ Campaign Geographic Analysis")
+        
+        campaign = st.session_state.current_campaign
+        location = campaign['location']
+        
+        if location in COUNTRIES_DATA:
+            coords = COUNTRIES_DATA[location]['coords']
+            
+            map_data = pd.DataFrame({
+                'lat': [coords[0]],
+                'lon': [coords[1]], 
+                'location': [location],
+                'campaign': [campaign['campaign_type']],
+                'company': [campaign['company_name']]
+            })
+            
+            fig = px.scatter_mapbox(
+                map_data,
+                lat='lat',
+                lon='lon',
+                hover_name='location',
+                hover_data={'campaign': True, 'company': True, 'lat': False, 'lon': False},
+                color_discrete_sequence=['#00d4ff'],
+                size_max=20,
+                zoom=3,
+                title=f"Campaign Target Location: {location}"
+            )
+            
+            fig.update_layout(
+                mapbox_style="carto-darkmatter",
+                template="plotly_dark",
+                height=500
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("🎯 Campaign Type", campaign['campaign_type'])
+            with col2:
+                st.metric("🌍 Target Market", location)
+            with col3:
+                st.metric("💰 Budget", f"{campaign.get('budget', 'TBD')} {campaign.get('currency', 'USD')}")
+            with col4:
+                st.metric("📅 Duration", campaign.get('duration', 'TBD'))
+        
+        if campaign.get('budget') and campaign['budget'].isdigit():
+            st.subheader("📈 Campaign Performance Projections")
+            
+            budget = int(campaign['budget'])
+            
+            estimated_reach = budget * 30
+            estimated_clicks = int(estimated_reach * 0.04)
+            estimated_conversions = int(estimated_clicks * 0.03)
+            estimated_revenue = estimated_conversions * 65
+            roi = ((estimated_revenue - budget) / budget) * 100 if budget > 0 else 0
+            
+            proj_col1, proj_col2, proj_col3, proj_col4 = st.columns(4)
+            
+            with proj_col1:
+                st.metric("👥 Estimated Reach", f"{estimated_reach:,}")
+            with proj_col2:
+                st.metric("👆 Expected Clicks", f"{estimated_clicks:,}")
+            with proj_col3:
+                st.metric("💰 Projected Conversions", f"{estimated_conversions:,}")
+            with proj_col4:
+                st.metric("📊 Projected ROI", f"{roi:.0f}%")
+            
+            days = list(range(1, 31))
+            daily_reach = [int(estimated_reach * (i/30) * (1 + 0.1 * np.sin(i/5))) for i in days]
+            cumulative_conversions = [int(estimated_conversions * (i/30)) for i in days]
+            
+            chart_data = pd.DataFrame({
+                'Day': days,
+                'Daily Reach': daily_reach,
+                'Cumulative Conversions': cumulative_conversions
+            })
+            
+            fig = px.line(chart_data, x='Day', y=['Daily Reach', 'Cumulative Conversions'],
+                         title="Projected 30-Day Campaign Performance")
+            fig.update_layout(template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
+    
+    if st.session_state.generated_images:
+        st.markdown("---")
+        st.subheader("🎨 Generated Campaign Images")
+        
+        for i, img_data in enumerate(st.session_state.generated_images):
+            if 'image' in img_data:
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.image(img_data['image'], caption=f"Campaign Image {i+1}: {img_data['campaign']}", use_column_width=True)
+                
+                with col2:
+                    st.write(f"**Generated:** {img_data['timestamp'].strftime('%Y-%m-%d %H:%M')}")
+                    st.write(f"**Campaign:** {img_data['campaign']}")
+                    
+                    img_bytes = io.BytesIO()
+                    img_data['image'].save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    st.download_button(
+                        f"📥 Download",
+                        data=img_bytes.getvalue(),
+                        file_name=f"campaign_image_{i+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        use_container_width=True
+                    )
+    
+    if st.session_state.campaign_results is not None:
+        st.markdown("---")
+        st.subheader("📧 Email Campaign Performance Analysis")
+        
+        results_df = st.session_state.campaign_results
+        
+        total_sent = len(results_df[results_df['status'] == 'sent'])
+        total_failed = len(results_df[results_df['status'] == 'failed'])
+        total_invalid = len(results_df[results_df['status'] == 'invalid'])
+        success_rate = (total_sent / len(results_df)) * 100 if len(results_df) > 0 else 0
+        
+        perf_col1, perf_col2, perf_col3, perf_col4 = st.columns(4)
+        
+        with perf_col1:
+            st.metric("📧 Total Emails", len(results_df))
+        with perf_col2:
+            st.metric("✅ Successfully Delivered", total_sent, delta=f"{success_rate:.1f}%")
+        with perf_col3:
+            st.metric("❌ Failed Deliveries", total_failed)
+        with perf_col4:
+            st.metric("⚠️ Invalid Addresses", total_invalid)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            status_counts = results_df['status'].value_counts()
+            fig = px.pie(
+                values=status_counts.values, 
+                names=status_counts.index,
+                title="Email Campaign Results Distribution",
+                color_discrete_map={'sent': '#28a745', 'failed': '#dc3545', 'invalid': '#ffc107'}
+            )
+            fig.update_layout(template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            if total_sent > 0:
+                sent_emails = results_df[results_df['status'] == 'sent'].copy()
+                sent_emails['domain'] = sent_emails['email'].str.split('@').str[1]
+                domain_counts = sent_emails['domain'].value_counts().head(8)
+                
+                fig = px.bar(
+                    x=domain_counts.values, 
+                    y=domain_counts.index,
+                    title="Top Email Domains Reached",
+                    orientation='h',
+                    color_discrete_sequence=['#28a745']
+                )
+                fig.update_layout(template="plotly_dark")
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with st.expander("📋 View Detailed Email Campaign Results"):
+            st.dataframe(
+                results_df,
+                column_config={
+                    "email": st.column_config.TextColumn("📧 Email Address"),
+                    "name": st.column_config.TextColumn("👤 Name"),
+                    "status": st.column_config.TextColumn("📊 Status"),
+                    "error": st.column_config.TextColumn("❌ Error (if any)"),
+                    "timestamp": st.column_config.TextColumn("⏰ Time Sent")
+                },
+                use_container_width=True
+            )
+    
+    else:
+        st.info("""
+        📊 **Analytics Dashboard**
+        
+        This comprehensive analytics section provides:
+        
+        **🗺️ Geographic Analysis:**
+        - Interactive campaign targeting maps
+        - Location-based performance insights
+        
+        **📈 Performance Projections:**
+        - ROI calculations and forecasts
+        - Estimated reach and conversion metrics
+        
+        **📧 Email Campaign Analytics:**
+        - Real-time delivery tracking
+        - Success rate analysis
+        - Domain performance breakdown
+        
+        **🎨 Creative Asset Tracking:**
+        - Generated campaign images
+        - Asset download and management
+        
+        Create campaigns and send emails to unlock powerful analytics insights!
+        """)
+
+if __name__ == "__main__":
+    main()
