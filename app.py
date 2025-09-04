@@ -24,14 +24,14 @@ from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import silhouette_score, classification_report, mean_squared_error
+from sklearn.metrics import silhouette_score, classification_report, mean_squared_error, accuracy_score
 import seaborn as sns
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings('ignore')
 
 # ================================
-# CONFIGURATION (EXACT AS SPECIFIED)
+# CONFIGURATION
 # ================================
 
 # Groq Configuration
@@ -95,7 +95,6 @@ def initialize_session_state():
     for var in session_vars:
         if var not in st.session_state:
             st.session_state[var] = defaults.get(var, None)
-
 # ================================
 # ENHANCED BULK EMAIL SENDER CLASS
 # ================================
@@ -247,7 +246,6 @@ class EnhancedBulkEmailSender:
             return True
         except EmailNotValidError:
             return False
-
 # ================================
 # ADVANCED ANALYTICS CLASS
 # ================================
@@ -273,7 +271,10 @@ class AdvancedAnalytics:
         
         # Fill categorical missing values with mode
         for col in categorical_columns:
-            df_processed[col].fillna(df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else 'Unknown', inplace=True)
+            if not df_processed[col].mode().empty:
+                df_processed[col].fillna(df_processed[col].mode().iloc[0], inplace=True)
+            else:
+                df_processed[col].fillna('Unknown', inplace=True)
         
         # Encode categorical variables
         for col in categorical_columns:
@@ -281,7 +282,11 @@ class AdvancedAnalytics:
                 self.label_encoders[col] = LabelEncoder()
                 df_processed[col + '_encoded'] = self.label_encoders[col].fit_transform(df_processed[col].astype(str))
             else:
-                df_processed[col + '_encoded'] = self.label_encoders[col].transform(df_processed[col].astype(str))
+                try:
+                    df_processed[col + '_encoded'] = self.label_encoders[col].transform(df_processed[col].astype(str))
+                except:
+                    # Handle unseen labels
+                    df_processed[col + '_encoded'] = 0
         
         return df_processed
     
@@ -455,7 +460,6 @@ class AdvancedAnalytics:
             
         except Exception as e:
             return None, f"Prediction error: {str(e)}"
-
 # ================================
 # ENHANCED VISUALIZATION FUNCTIONS
 # ================================
@@ -528,7 +532,7 @@ def create_enhanced_clustering_viz(clustering_results):
     fig.add_trace(
         go.Table(
             header=dict(values=['Cluster', 'Size'] + list(clustering_results['numeric_columns'][:3])),
-            cells=dict(values=list(zip(*cluster_stats)))
+            cells=dict(values=list(zip(*cluster_stats)) if cluster_stats else [[], [], []])
         ),
         row=2, col=2
     )
@@ -588,7 +592,6 @@ def create_feature_importance_viz(importance_results):
         score = max(0, 100 - mse)  # Convert to percentage-like score
         title = "MSE Score"
     else:
-        from sklearn.metrics import accuracy_score
         score = accuracy_score(importance_results['actual_values'], importance_results['predictions']) * 100
         title = "Accuracy Score"
     
@@ -729,7 +732,6 @@ def create_prediction_viz(prediction_results):
         metrics = ['Train MSE', 'Test MSE']
         values = [train_mse, test_mse]
     else:
-        from sklearn.metrics import accuracy_score
         train_acc = accuracy_score(prediction_results['train_actual'], prediction_results['train_predictions'])
         test_acc = accuracy_score(prediction_results['test_actual'], prediction_results['test_predictions'])
         metrics = ['Train Accuracy', 'Test Accuracy']
@@ -753,9 +755,8 @@ def create_prediction_viz(prediction_results):
     )
     
     return fig
-
 # ================================
-# GROQ AI FUNCTIONS (SAME AS BEFORE)
+# GROQ AI FUNCTIONS
 # ================================
 
 def generate_campaign_strategy_with_groq(campaign_data):
@@ -1052,9 +1053,8 @@ The Marketing Team
 
 ---
 You received this email because you're subscribed to our updates.'''
-
 # ================================
-# IMAGE GENERATION FUNCTIONS (SAME AS BEFORE)
+# IMAGE GENERATION FUNCTIONS
 # ================================
 
 def generate_campaign_image_hf(campaign_description):
@@ -1161,7 +1161,6 @@ def generate_placeholder_image(campaign_description):
     except Exception as e:
         st.error(f"Error creating placeholder: {e}")
         return None
-
 # ================================
 # DATA PROCESSING FUNCTIONS
 # ================================
@@ -1308,6 +1307,13 @@ def extract_google_sheet_id(url):
     except:
         return None
 
+def validate_email_format(email):
+    """Validate email format"""
+    try:
+        validate_email(email)
+        return True
+    except EmailNotValidError:
+        return False
 # ================================
 # MAIN APPLICATION
 # ================================
@@ -1351,13 +1357,11 @@ def main():
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
             width: 100%;
-            backdrop-filter: blur(10px);
         }
         
         .stButton > button:hover {
             transform: translateY(-3px) scale(1.02);
             box-shadow: 0 8px 25px rgba(0, 212, 255, 0.6);
-            background: linear-gradient(45deg, #0099cc, #00d4ff, #764ba2);
         }
         
         .success-metric {
@@ -1368,7 +1372,6 @@ def main():
             text-align: center;
             font-weight: 600;
             box-shadow: 0 4px 20px rgba(40, 167, 69, 0.3);
-            backdrop-filter: blur(10px);
         }
         
         .email-config-box {
@@ -1377,8 +1380,6 @@ def main():
             border-radius: 15px;
             border: 1px solid rgba(255,255,255,0.2);
             margin: 15px 0;
-            backdrop-filter: blur(15px);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
         
         .analytics-card {
@@ -1387,7 +1388,6 @@ def main():
             border-radius: 12px;
             border: 1px solid rgba(255,255,255,0.1);
             margin: 10px 0;
-            backdrop-filter: blur(10px);
         }
         
         .metric-card {
@@ -1395,16 +1395,6 @@ def main():
             padding: 1rem;
             border-radius: 10px;
             border: 1px solid rgba(255,255,255,0.2);
-            backdrop-filter: blur(10px);
-        }
-        
-        .sidebar .stSelectbox > div > div {
-            background: rgba(255,255,255,0.1);
-            border-radius: 8px;
-        }
-        
-        .stProgress > div > div {
-            background: linear-gradient(90deg, #00d4ff, #667eea);
         }
         
         .status-indicator {
@@ -1501,7 +1491,6 @@ def main():
         show_advanced_analytics_page()
     elif st.session_state.current_page == "ML Insights":
         show_ml_insights_page()
-
 # ================================
 # PAGE FUNCTIONS
 # ================================
@@ -1624,13 +1613,13 @@ def show_campaign_dashboard_page():
                     use_container_width=True)
 
 def show_email_marketing_page():
-    """Enhanced email marketing page with advanced bulk email functionality"""
+    """Enhanced email marketing page"""
     st.header("📧 Comprehensive Email Marketing Center")
     
     if st.session_state.campaign_data:
         st.success(f"🎯 Active Campaign: **{st.session_state.campaign_data['company_name']}** - {st.session_state.campaign_data['campaign_type']}")
     
-    # Email template generation using Groq AI
+    # Email template generation
     st.subheader("🤖 AI-Powered Email Template Generator")
     
     template_col1, template_col2 = st.columns(2)
@@ -1660,7 +1649,7 @@ def show_email_marketing_page():
                 
                 st.success("✨ Clean email template generated successfully!")
     
-    # Template editor with enhanced UI
+    # Template editor
     if st.session_state.email_template_html or st.session_state.email_template_text:
         st.markdown("---")
         st.subheader("📝 Email Template Editor")
@@ -1685,19 +1674,13 @@ def show_email_marketing_page():
         else:
             st.session_state.email_template_text = edited_content
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if edit_choice == "HTML Template" and st.button("👀 Preview Email Template"):
-                preview = edited_content.replace("{first_name}", "John").replace("{name}", "John Smith").replace("{email}", "john@example.com")
-                st.components.v1.html(preview, height=600, scrolling=True)
-        
-        with col2:
-            if st.button("💾 Save Template"):
-                st.success("Template saved to session!")
+        if edit_choice == "HTML Template" and st.button("👀 Preview Email Template"):
+            preview = edited_content.replace("{first_name}", "John").replace("{name}", "John Smith").replace("{email}", "john@example.com")
+            st.components.v1.html(preview, height=600, scrolling=True)
     
     st.markdown("---")
     
-    # Enhanced Email Configuration Section
+    # Email Configuration Section
     st.subheader("📧 Email Configuration & Method Selection")
     st.markdown('<div class="email-config-box">', unsafe_allow_html=True)
     
@@ -1705,24 +1688,21 @@ def show_email_marketing_page():
     
     with config_col1:
         sender_email = st.text_input("📧 Gmail Address", 
-                                   value=st.session_state.sender_email,
-                                   help="Using configured Gmail address")
+                                   value=st.session_state.sender_email)
         email_method = st.selectbox("📮 Email Sending Method", ["YagMail (Recommended)", "SMTP Direct"])
         
     with config_col2:
         sender_password = st.text_input("🔑 Gmail App Password", 
                                       type="password",
-                                      value=st.session_state.sender_password,
-                                      help="Generate app password from Gmail settings > Security > App passwords")
-        delay_seconds = st.slider("⏱️ Delay Between Emails (seconds)", 1, 10, 2,
-                                 help="Recommended: 2-5 seconds to avoid rate limiting")
+                                      value=st.session_state.sender_password)
+        delay_seconds = st.slider("⏱️ Delay Between Emails (seconds)", 1, 10, 2)
     
     st.session_state.sender_email = sender_email
     st.session_state.sender_password = sender_password
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Test email configuration with enhanced feedback
+    # Test email configuration
     if sender_email and sender_password:
         if st.button("🔍 Test Email Configuration"):
             try:
@@ -1734,7 +1714,6 @@ def show_email_marketing_page():
                 
                 if success:
                     st.success("✅ Email configuration successful!")
-                    st.info(f"✉️ Method: {email_method} | 📧 Address: {sender_email}")
                 else:
                     st.error("❌ Email configuration failed!")
             except Exception as e:
@@ -1742,58 +1721,36 @@ def show_email_marketing_page():
     
     st.markdown("---")
     
-    # Enhanced Contact Data Management Section
+    # Contact Data Management
     st.subheader("👥 Contact Data Management")
     
-    contact_method = st.radio("📥 Choose Contact Input Method:", 
-                             ["📁 Upload File (CSV/Excel)", "📋 Bulk Paste", "🌐 Google Forms/Sheets"])
+    contact_method = st.radio("📥 Choose Contact Input Method:", [
+        "📁 Upload File (CSV/Excel)", "📋 Bulk Paste", "🌐 Google Forms/Sheets"
+    ])
     
     if contact_method == "📁 Upload File (CSV/Excel)":
-        uploaded_file = st.file_uploader("Upload Contact File", 
-                                       type=['csv', 'xlsx'], 
-                                       help="Upload a CSV or Excel file with 'email' and 'name' columns")
+        uploaded_file = st.file_uploader("Upload Contact File", type=['csv', 'xlsx'])
         
         if uploaded_file:
             contacts = process_contacts_data_file(uploaded_file)
-            
             if contacts is not None:
                 st.session_state.email_contacts = contacts
                 st.success(f"✅ Successfully loaded {len(contacts)} valid contacts!")
-                
-                # Show sample data
                 with st.expander("👀 Preview Contact Data"):
                     st.dataframe(contacts.head(10))
     
     elif contact_method == "📋 Bulk Paste":
         st.info("💡 Paste email addresses or email,name pairs (one per line)")
-        
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            bulk_text = st.text_area("Paste Contact Data:", 
-                                    height=200,
-                                    placeholder="""john.doe@example.com, John Doe
-jane.smith@example.com, Jane Smith
-mark.wilson@example.com
-sarah.johnson@company.com, Sarah Johnson""")
-        
-        with col2:
-            st.markdown("**Supported Formats:**")
-            st.markdown("• `email@domain.com`")
-            st.markdown("• `email@domain.com, Name`")
-            st.markdown("• `Name, email@domain.com`")
-            st.markdown("• Tab-separated values")
+        bulk_text = st.text_area("Paste Contact Data:", height=200)
         
         if st.button("🔄 Process Pasted Data") and bulk_text:
             contacts = process_bulk_paste_contacts(bulk_text)
-            
             if contacts is not None:
                 st.session_state.email_contacts = contacts
                 st.success(f"✅ Successfully processed {len(contacts)} valid contacts!")
     
     elif contact_method == "🌐 Google Forms/Sheets":
-        st.info("💡 Make sure your Google Sheet is publicly accessible (Anyone with link can view)")
-        sheet_url = st.text_input("Google Sheets URL:", 
-                                 placeholder="https://docs.google.com/spreadsheets/d/your-sheet-id/edit#gid=0")
+        sheet_url = st.text_input("Google Sheets URL:")
         
         if st.button("📊 Load from Google Sheets") and sheet_url:
             try:
@@ -1801,39 +1758,10 @@ sarah.johnson@company.com, Sarah Johnson""")
                 if sheet_id:
                     csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
                     df = pd.read_csv(csv_url)
-                    
-                    # Process the dataframe as contacts
-                    df.columns = df.columns.str.lower()
-                    
-                    email_col = None
-                    name_col = None
-                    
-                    for col in df.columns:
-                        if any(keyword in col for keyword in ['email', 'mail', 'e-mail']):
-                            email_col = col
-                            break
-                    
-                    for col in df.columns:
-                        if any(keyword in col for keyword in ['name', 'first', 'last', 'full']):
-                            name_col = col
-                            break
-                    
-                    if email_col:
-                        contacts = []
-                        for _, row in df.iterrows():
-                            email = str(row[email_col]).strip().lower() if pd.notna(row[email_col]) else ""
-                            name = str(row[name_col]).strip() if name_col and pd.notna(row[name_col]) else extract_name_from_email_address(email)
-                            
-                            if email and validate_email_format(email):
-                                contacts.append({'email': email, 'name': name})
-                        
-                        if contacts:
-                            st.session_state.email_contacts = pd.DataFrame(contacts)
-                            st.success(f"✅ Successfully loaded {len(contacts)} contacts from Google Sheets!")
-                        else:
-                            st.error("❌ No valid contacts found in Google Sheets")
-                    else:
-                        st.error("❌ No email column found in Google Sheets")
+                    contacts = process_contacts_data_file(io.StringIO(df.to_csv(index=False)))
+                    if contacts is not None:
+                        st.session_state.email_contacts = contacts
+                        st.success(f"✅ Successfully loaded {len(contacts)} contacts!")
                 else:
                     st.error("❌ Invalid Google Sheets URL")
             except Exception as e:
@@ -1852,61 +1780,18 @@ sarah.johnson@company.com, Sarah Johnson""")
             st.metric("🏢 Unique Domains", domains)
         with col3:
             avg_name_length = st.session_state.email_contacts['name'].str.len().mean()
-            st.metric("📝 Avg Name Length", f"{avg_name_length:.0f} chars")
+            st.metric("📝 Avg Name Length", f"{avg_name_length:.0f}")
         with col4:
             duplicate_emails = st.session_state.email_contacts['email'].duplicated().sum()
             st.metric("🔄 Duplicates", duplicate_emails)
         
-        # Contact list editor with enhanced features
-        with st.expander("✏️ Edit Contact List", expanded=False):
-            edited_contacts = st.data_editor(
-                st.session_state.email_contacts,
-                column_config={
-                    "email": st.column_config.TextColumn("📧 Email Address", width="large"),
-                    "name": st.column_config.TextColumn("👤 Full Name", width="medium")
-                },
-                num_rows="dynamic",
-                use_container_width=True,
-                key="contact_editor"
-            )
-            
+        with st.expander("✏️ Edit Contact List"):
+            edited_contacts = st.data_editor(st.session_state.email_contacts, num_rows="dynamic")
             if st.button("💾 Save Contact Changes"):
                 st.session_state.email_contacts = edited_contacts
                 st.success("Contact list updated!")
-        
-        # Bulk operations
-        st.markdown("**Bulk Operations:**")
-        bulk_col1, bulk_col2, bulk_col3 = st.columns(3)
-        
-        with bulk_col1:
-            if st.button("🧹 Remove Duplicates"):
-                original_count = len(st.session_state.email_contacts)
-                st.session_state.email_contacts = st.session_state.email_contacts.drop_duplicates(subset=['email'])
-                new_count = len(st.session_state.email_contacts)
-                st.success(f"Removed {original_count - new_count} duplicates")
-        
-        with bulk_col2:
-            if st.button("🔤 Standardize Names"):
-                st.session_state.email_contacts['name'] = st.session_state.email_contacts['name'].str.title()
-                st.success("Names standardized!")
-        
-        with bulk_col3:
-            if st.button("📧 Validate Emails"):
-                valid_emails = []
-                for _, row in st.session_state.email_contacts.iterrows():
-                    if validate_email_format(row['email']):
-                        valid_emails.append(row)
-                
-                original_count = len(st.session_state.email_contacts)
-                st.session_state.email_contacts = pd.DataFrame(valid_emails)
-                new_count = len(st.session_state.email_contacts)
-                
-                if original_count != new_count:
-                    st.warning(f"Removed {original_count - new_count} invalid emails")
-                else:
-                    st.success("All emails are valid!")
     
-    # Enhanced Bulk Email Campaign Section
+    # Enhanced Bulk Email Campaign
     if (st.session_state.email_contacts is not None and 
         (st.session_state.email_template_html or st.session_state.email_template_text) and
         sender_email and sender_password):
@@ -1916,28 +1801,27 @@ sarah.johnson@company.com, Sarah Johnson""")
         
         df = st.session_state.email_contacts
         
-        # Campaign overview with enhanced metrics
+        # Campaign overview
         st.markdown("### 📊 Campaign Overview")
         overview_col1, overview_col2, overview_col3, overview_col4 = st.columns(4)
         
         with overview_col1:
-            st.markdown('<div class="metric-card">👥 Recipients<br><strong>' + str(len(df)) + '</strong></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card">👥 Recipients<br><strong>{len(df)}</strong></div>', unsafe_allow_html=True)
         with overview_col2:
             domains = df['email'].str.split('@').str[1].nunique()
-            st.markdown('<div class="metric-card">🏢 Domains<br><strong>' + str(domains) + '</strong></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card">🏢 Domains<br><strong>{domains}</strong></div>', unsafe_allow_html=True)
         with overview_col3:
             template_status = "HTML" if st.session_state.email_template_html else "Plain Text"
-            st.markdown('<div class="metric-card">📧 Template<br><strong>' + template_status + '</strong></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card">📧 Template<br><strong>{template_status}</strong></div>', unsafe_allow_html=True)
         with overview_col4:
             estimated_time = (len(df) * delay_seconds) / 60
-            st.markdown('<div class="metric-card">⏱️ Est. Time<br><strong>' + f"{estimated_time:.0f}m" + '</strong></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card">⏱️ Est. Time<br><strong>{estimated_time:.0f}m</strong></div>', unsafe_allow_html=True)
         
-        # Campaign configuration with advanced options
+        # Campaign configuration
         config_col1, config_col2 = st.columns(2)
         
         with config_col1:
-            bulk_subject = st.text_input("📧 Campaign Subject Line", 
-                value="Important message for {name}")
+            bulk_subject = st.text_input("📧 Campaign Subject Line", value="Important message for {name}")
             test_email = st.text_input("🧪 Test Email Address", placeholder="test@email.com")
             
         with config_col2:
@@ -1950,123 +1834,506 @@ sarah.johnson@company.com, Sarah Johnson""")
             else:
                 template_to_use = st.session_state.email_template_text
                 st.info("✅ Plain text template ready")
-            
-            batch_size = st.selectbox("📦 Batch Size", [10, 25, 50, 100, 250], index=1,
-                                     help="Number of emails to send in each batch")
         
-        # Advanced test email functionality
-        if test_email:
-            test_col1, test_col2 = st.columns(2)
-            with test_col1:
-                if st.button("🧪 Send Test Email"):
-                    try:
-                        test_sender = EnhancedBulkEmailSender(sender_email, sender_password)
-                        test_content = test_sender.create_personalized_email(template_to_use, {"name": "Test User", "first_name": "Test", "email": test_email})
-                        test_subject = test_sender.create_personalized_email(bulk_subject, {"name": "Test User", "first_name": "Test", "email": test_email})
-                        
-                        if email_method == "YagMail (Recommended)":
-                            if test_sender.setup_yagmail_connection():
-                                test_sender.yag.send(to=test_email, subject=test_subject, contents=test_content)
-                                st.success("✅ Test email sent successfully!")
-                        else:
-                            if test_sender.setup_smtp_connection():
-                                msg = MIMEMultipart()
-                                msg['From'] = sender_email
-                                msg['To'] = test_email
-                                msg['Subject'] = test_subject
-                                msg.attach(MIMEText(test_content, 'html'))
-                                test_sender.smtp_server.sendmail(sender_email, test_email, msg.as_string())
-                                test_sender.smtp_server.quit()
-                                st.success("✅ Test email sent successfully!")
-                        
-                    except Exception as e:
-                        st.error(f"❌ Test failed: {str(e)}")
-            
-            with test_col2:
-                if st.button("👀 Preview Test Content"):
-                    test_content = template_to_use.replace("{name}", "Test User").replace("{first_name}", "Test").replace("{email}", test_email)
-                    with st.expander("📧 Email Preview", expanded=True):
-                        if send_format == "HTML":
-                            st.components.v1.html(test_content, height=400, scrolling=True)
-                        else:
-                            st.code(test_content)
-        
-        # Enhanced bulk campaign launch with advanced features
-        st.markdown("### 🎯 Campaign Launch Control Center")
-        
-        # Pre-flight checklist
-        with st.expander("✅ Pre-Flight Checklist", expanded=True):
-            checklist_col1, checklist_col2 = st.columns(2)
-            with checklist_col1:
-                st.markdown("**Email Settings:**")
-                st.write("✅ Sender email configured" if sender_email else "❌ Sender email missing")
-                st.write("✅ App password set" if sender_password else "❌ App password missing")
-                st.write(f"✅ Method: {email_method}")
-            
-            with checklist_col2:
-                st.markdown("**Campaign Settings:**")
-                st.write(f"✅ {len(df)} contacts loaded")
-                st.write("✅ Template ready" if template_to_use else "❌ Template missing")
-                st.write(f"✅ Delay: {delay_seconds}s between emails")
-        
-        # Campaign launch buttons with confirmation
-        launch_col1, launch_col2 = st.columns([2, 1])
-        
-        with launch_col1:
-            if st.button("🚀 LAUNCH ENHANCED BULK EMAIL CAMPAIGN", type="primary", use_container_width=True):
-                st.warning(f"⚠️ **FINAL CONFIRMATION REQUIRED**")
-                st.markdown(f"""
-                **You are about to send {len(df)} personalized emails:**
-                - 📧 From: {sender_email}
-                - 📝 Subject: {bulk_subject}
-                - ⏱️ Estimated time: {estimated_time:.0f} minutes
-                - 📮 Method: {email_method}
-                - 🔄 Delay: {delay_seconds} seconds between emails
+        # Test email functionality
+        if test_email and st.button("🧪 Send Test Email"):
+            try:
+                test_sender = EnhancedBulkEmailSender(sender_email, sender_password)
+                test_content = test_sender.create_personalized_email(template_to_use, {"name": "Test User", "first_name": "Test", "email": test_email})
+                test_subject = test_sender.create_personalized_email(bulk_subject, {"name": "Test User", "first_name": "Test", "email": test_email})
                 
-                **This action cannot be undone!**
-                """)
+                if email_method == "YagMail (Recommended)":
+                    if test_sender.setup_yagmail_connection():
+                        test_sender.yag.send(to=test_email, subject=test_subject, contents=test_content)
+                        st.success("✅ Test email sent successfully!")
+                else:
+                    if test_sender.setup_smtp_connection():
+                        msg = MIMEMultipart()
+                        msg['From'] = sender_email
+                        msg['To'] = test_email
+                        msg['Subject'] = test_subject
+                        msg.attach(MIMEText(test_content, 'html'))
+                        test_sender.smtp_server.sendmail(sender_email, test_email, msg.as_string())
+                        test_sender.smtp_server.quit()
+                        st.success("✅ Test email sent successfully!")
+            except Exception as e:
+                st.error(f"❌ Test failed: {str(e)}")
+        
+        # Bulk campaign launch
+        if st.button("🚀 LAUNCH ENHANCED BULK EMAIL CAMPAIGN", type="primary", use_container_width=True):
+            st.warning(f"⚠️ About to send {len(df)} personalized emails. This action cannot be undone!")
+            
+            if st.button("✅ YES, SEND ALL EMAILS NOW", key="final_confirm", type="primary"):
+                st.info("🚀 Starting enhanced bulk email campaign...")
                 
-                if st.button("✅ YES, SEND ALL EMAILS NOW", key="final_confirm", type="primary"):
-                    st.info("🚀 Starting enhanced bulk email campaign...")
+                try:
+                    email_sender = EnhancedBulkEmailSender(sender_email, sender_password)
+                    method = "yagmail" if email_method == "YagMail (Recommended)" else "smtp"
                     
-                    try:
-                        email_sender = EnhancedBulkEmailSender(sender_email, sender_password)
-                        method = "yagmail" if email_method == "YagMail (Recommended)" else "smtp"
+                    results = email_sender.send_bulk_emails_enhanced(df, bulk_subject, template_to_use, method, delay_seconds)
+                    
+                    if not results.empty:
+                        success_count = len(results[results['status'] == 'sent'])
+                        failed_count = len(results[results['status'] == 'failed'])
+                        invalid_count = len(results[results['status'] == 'invalid'])
+                        success_rate = (success_count / len(results)) * 100
                         
-                        results = email_sender.send_bulk_emails_enhanced(
-                            df, bulk_subject, template_to_use, method, delay_seconds
+                        st.markdown("### 🎉 Enhanced Campaign Results")
+                        
+                        result_col1, result_col2, result_col3, result_col4 = st.columns(4)
+                        
+                        with result_col1:
+                            st.markdown(f'<div class="success-metric">✅ Successfully Sent<br><h2>{success_count}</h2></div>', unsafe_allow_html=True)
+                        with result_col2:
+                            st.markdown(f'<div class="metric-card">❌ Failed<br><strong>{failed_count}</strong></div>', unsafe_allow_html=True)
+                        with result_col3:
+                            st.markdown(f'<div class="metric-card">⚠️ Invalid<br><strong>{invalid_count}</strong></div>', unsafe_allow_html=True)
+                        with result_col4:
+                            st.markdown(f'<div class="metric-card">📊 Success Rate<br><strong>{success_rate:.1f}%</strong></div>', unsafe_allow_html=True)
+                        
+                        st.session_state.campaign_results = results
+                        
+                        # Enhanced results analysis
+                        if success_count > 0:
+                            st.markdown("### 📈 Campaign Analysis")
+                            
+                            # Domain analysis
+                            sent_results = results[results['status'] == 'sent']
+                            domain_analysis = sent_results['email'].str.split('@').str[1].value_counts().head(10)
+                            
+                            fig = px.bar(
+                                x=domain_analysis.index,
+                                y=domain_analysis.values,
+                                title="Top Email Domains Reached",
+                                color_discrete_sequence=['#28a745']
+                            )
+                            fig.update_layout(template="plotly_dark")
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Download results
+                        csv_data = results.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download Campaign Results",
+                            data=csv_data,
+                            file_name=f"enhanced_campaign_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
                         )
                         
-                        if not results.empty:
-                            success_count = len(results[results['status'] == 'sent'])
-                            failed_count = len(results[results['status'] == 'failed'])
-                            invalid_count = len(results[results['status'] == 'invalid'])
-                            success_rate = (success_count / len(results)) * 100
+                        with st.expander("📋 View Detailed Campaign Results"):
+                            st.dataframe(results, use_container_width=True)
+                        
+                        if success_count > 0:
+                            st.balloons()
+                except Exception as e:
+                    st.error(f"❌ Campaign error: {str(e)}")
+    
+    else:
+        st.info("📧 **Getting Started:** Configure email settings, generate templates, load contacts, then launch campaigns!")
+def show_advanced_analytics_page():
+    """Enhanced analytics page with data upload and AI analysis"""
+    st.header("📊 Campaign Analytics & Data Intelligence Platform")
+    
+    # Data Upload and Analysis Section
+    st.subheader("📁 Upload Data for AI Analysis")
+    
+    uploaded_files = st.file_uploader(
+        "Upload Data Files for Analysis", 
+        type=['csv', 'xlsx', 'xls', 'json'],
+        accept_multiple_files=True,
+        help="Upload multiple files for comprehensive analysis"
+    )
+    
+    if uploaded_files and st.button("🤖 Analyze Data with Groq AI"):
+        with st.spinner("🔍 Processing files and generating AI analysis..."):
+            for uploaded_file in uploaded_files:
+                df = process_uploaded_data_file(uploaded_file)
+                
+                if df is not None:
+                    st.markdown(f"---")
+                    st.markdown(f"### 📊 Analysis of {uploaded_file.name}")
+                    
+                    # Show data preview
+                    with st.expander(f"📋 Data Preview - {uploaded_file.name}"):
+                        st.dataframe(df.head(10), use_container_width=True)
+                        st.write(f"**Shape:** {df.shape[0]} rows, {df.shape[1]} columns")
+                    
+                    # AI Analysis using Groq
+                    analysis = analyze_data_with_groq(df, f"File: {uploaded_file.name}")
+                    st.markdown(analysis)
+                    
+                    # Generate visualizations based on data
+                    if not df.empty:
+                        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+                        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+                        
+                        if len(numeric_cols) > 0:
+                            st.markdown("#### 📈 Automated Visualizations")
                             
-                            st.markdown("### 🎉 Enhanced Campaign Results")
+                            vis_col1, vis_col2 = st.columns(2)
                             
-                            result_col1, result_col2, result_col3, result_col4 = st.columns(4)
+                            with vis_col1:
+                                if len(numeric_cols) >= 1:
+                                    fig = px.histogram(df, x=numeric_cols[0], 
+                                                     title=f"Distribution of {numeric_cols[0]}")
+                                    fig.update_layout(template="plotly_dark")
+                                    st.plotly_chart(fig, use_container_width=True)
                             
-                            with result_col1:
-                                st.markdown(f'<div class="success-metric">✅ Successfully Sent<br><h2>{success_count}</h2></div>', unsafe_allow_html=True)
-                            with result_col2:
-                                st.markdown(f'<div class="metric-card">❌ Failed<br><strong>{failed_count}</strong></div>', unsafe_allow_html=True)
-                            with result_col3:
-                                st.markdown(f'<div class="metric-card">⚠️ Invalid<br><strong>{invalid_count}</strong></div>', unsafe_allow_html=True)
-                            with result_col4:
-                                st.markdown(f'<div class="metric-card">📊 Success Rate<br><strong>{success_rate:.1f}%</strong></div>', unsafe_allow_html=True)
+                            with vis_col2:
+                                if len(numeric_cols) >= 2:
+                                    fig = px.scatter(df, x=numeric_cols[0], y=numeric_cols[1],
+                                                   title=f"{numeric_cols[0]} vs {numeric_cols[1]}")
+                                    fig.update_layout(template="plotly_dark")
+                                    st.plotly_chart(fig, use_container_width=True)
                             
-                            st.session_state.campaign_results = results
-                            
-                            # Enhanced results analysis
-                            if success_count > 0:
-                                st.markdown("### 📈 Campaign Analysis")
-                                
-                                # Domain analysis
-                                sent_results = results[results['status'] == 'sent']
-                                domain_analysis = sent_results['email'].str.split('@').str[1].value_counts().head(10)
-                                
-                                fig = px.bar(
-                                    x=domain_analysis.index,
-                                    y=domain_analysis.values,
-                                    title
+                            if len(categorical_cols) > 0 and len(numeric_cols) > 0:
+                                fig = px.box(df, x=categorical_cols[0], y=numeric_cols[0],
+                                           title=f"{numeric_cols[0]} by {categorical_cols[0]}")
+                                fig.update_layout(template="plotly_dark")
+                                st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Store dataset for ML analysis
+                    if 'uploaded_datasets' not in st.session_state:
+                        st.session_state.uploaded_datasets = []
+                    st.session_state.uploaded_datasets.append((uploaded_file.name, df))
+    
+    st.markdown("---")
+    
+    # Display generated images
+    if st.session_state.generated_images:
+        st.subheader("🎨 Generated Campaign Images")
+        
+        for i, img_data in enumerate(st.session_state.generated_images):
+            if 'image' in img_data:
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.image(img_data['image'], caption=f"Campaign Image {i+1}: {img_data['campaign']}", use_container_width=True)
+                
+                with col2:
+                    st.write(f"**Generated:** {img_data['timestamp'].strftime('%Y-%m-%d %H:%M')}")
+                    st.write(f"**Campaign:** {img_data['campaign']}")
+                    st.write(f"**Model:** {img_data.get('model', 'Unknown')}")
+                    
+                    img_bytes = io.BytesIO()
+                    img_data['image'].save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    st.download_button(
+                        f"📥 Download",
+                        data=img_bytes.getvalue(),
+                        file_name=f"campaign_image_{i+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        use_container_width=True
+                    )
+    
+    # Email campaign results analysis
+    if st.session_state.campaign_results is not None:
+        st.markdown("---")
+        st.subheader("📧 Email Campaign Performance Analysis")
+        
+        results_df = st.session_state.campaign_results
+        
+        total_sent = len(results_df[results_df['status'] == 'sent'])
+        total_failed = len(results_df[results_df['status'] == 'failed'])
+        total_invalid = len(results_df[results_df['status'] == 'invalid'])
+        success_rate = (total_sent / len(results_df)) * 100 if len(results_df) > 0 else 0
+        
+        perf_col1, perf_col2, perf_col3, perf_col4 = st.columns(4)
+        
+        with perf_col1:
+            st.metric("📧 Total Emails", len(results_df))
+        with perf_col2:
+            st.metric("✅ Successfully Delivered", total_sent, delta=f"{success_rate:.1f}%")
+        with perf_col3:
+            st.metric("❌ Failed Deliveries", total_failed)
+        with perf_col4:
+            st.metric("⚠️ Invalid Addresses", total_invalid)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            status_counts = results_df['status'].value_counts()
+            fig = px.pie(
+                values=status_counts.values, 
+                names=status_counts.index,
+                title="Email Campaign Results Distribution",
+                color_discrete_map={'sent': '#28a745', 'failed': '#dc3545', 'invalid': '#ffc107'}
+            )
+            fig.update_layout(template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            if total_sent > 0:
+                sent_emails = results_df[results_df['status'] == 'sent'].copy()
+                sent_emails['domain'] = sent_emails['email'].str.split('@').str[1]
+                domain_counts = sent_emails['domain'].value_counts().head(8)
+                
+                fig = px.bar(
+                    x=domain_counts.values, 
+                    y=domain_counts.index,
+                    title="Top Email Domains Reached",
+                    orientation='h',
+                    color_discrete_sequence=['#28a745']
+                )
+                fig.update_layout(template="plotly_dark")
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with st.expander("📋 View Detailed Email Campaign Results"):
+            st.dataframe(results_df, use_container_width=True)
+
+def show_ml_insights_page():
+    """Advanced ML insights page with clustering, feature importance, and predictions"""
+    st.header("🤖 Machine Learning Insights & Predictions")
+    st.markdown('<div class="analytics-card">Advanced ML analytics with clustering, feature importance, and predictive modeling</div>', unsafe_allow_html=True)
+    
+    # Check if we have datasets
+    if not hasattr(st.session_state, 'uploaded_datasets') or not st.session_state.uploaded_datasets:
+        st.info("📊 **Upload data in the Advanced Analytics section first to unlock ML insights!**")
+        if st.button("🔗 Go to Advanced Analytics"):
+            st.session_state.current_page = "Advanced Analytics"
+            st.rerun()
+        return
+    
+    # Dataset selection
+    st.subheader("📊 Select Dataset for ML Analysis")
+    
+    dataset_names = [name for name, df in st.session_state.uploaded_datasets]
+    selected_dataset_name = st.selectbox("Choose Dataset:", dataset_names)
+    
+    selected_df = None
+    for name, df in st.session_state.uploaded_datasets:
+        if name == selected_dataset_name:
+            selected_df = df
+            break
+    
+    if selected_df is None:
+        st.error("No dataset selected")
+        return
+    
+    # Dataset info
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📋 Rows", selected_df.shape[0])
+    with col2:
+        st.metric("📊 Columns", selected_df.shape[1])
+    with col3:
+        numeric_cols = selected_df.select_dtypes(include=[np.number]).columns
+        st.metric("🔢 Numeric Cols", len(numeric_cols))
+    with col4:
+        categorical_cols = selected_df.select_dtypes(include=['object']).columns
+        st.metric("📝 Text Cols", len(categorical_cols))
+    
+    # ML Analysis Options
+    st.markdown("---")
+    
+    analysis_type = st.radio("🔬 Choose ML Analysis Type:", [
+        "🔍 Clustering Analysis", "📈 Feature Importance", "🔮 Predictive Modeling"
+    ])
+    
+    analytics = AdvancedAnalytics()
+    
+    if analysis_type == "🔍 Clustering Analysis":
+        st.subheader("🔍 Advanced Clustering Analysis")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            n_clusters = st.slider("Number of Clusters", 2, 10, 3)
+        with col2:
+            if st.button("🚀 Perform Clustering Analysis"):
+                with st.spinner("🔍 Performing clustering analysis..."):
+                    results, error = analytics.perform_clustering(selected_df, n_clusters)
+                    
+                    if error:
+                        st.error(f"❌ {error}")
+                    else:
+                        st.session_state.clustering_results = results
+                        st.success("✅ Clustering analysis completed!")
+        
+        # Display clustering results
+        if st.session_state.clustering_results:
+            st.markdown("### 📊 Clustering Results")
+            
+            results = st.session_state.clustering_results
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🎯 Clusters Found", results['n_clusters'])
+            with col2:
+                st.metric("📊 Silhouette Score", f"{results['silhouette_score']:.3f}")
+            with col3:
+                st.metric("📈 PCA Variance", f"{sum(results['pca_variance_ratio']):.3f}")
+            
+            # Create and display visualization
+            fig = create_enhanced_clustering_viz(results)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Download clustered data
+            clustered_csv = results['clustered_data'].to_csv(index=False)
+            st.download_button(
+                "📥 Download Clustered Data",
+                data=clustered_csv,
+                file_name=f"clustered_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+    
+    elif analysis_type == "📈 Feature Importance":
+        st.subheader("📈 Feature Importance Analysis")
+        
+        numeric_columns = selected_df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(numeric_columns) < 2:
+            st.error("❌ Need at least 2 numeric columns for feature importance analysis")
+            return
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            target_column = st.selectbox("🎯 Target Column", numeric_columns)
+        with col2:
+            if st.button("🚀 Calculate Feature Importance"):
+                with st.spinner("📈 Calculating feature importance..."):
+                    results, error = analytics.calculate_feature_importance(selected_df, target_column)
+                    
+                    if error:
+                        st.error(f"❌ {error}")
+                    else:
+                        st.session_state.feature_importance_results = results
+                        st.success("✅ Feature importance analysis completed!")
+        
+        # Display feature importance results
+        if st.session_state.feature_importance_results:
+            st.markdown("### 📊 Feature Importance Results")
+            
+            results = st.session_state.feature_importance_results
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🎯 Target Column", results['target_column'])
+            with col2:
+                st.metric("📊 Features Analyzed", len(results['feature_columns']))
+            with col3:
+                model_type = results['model_type'].title()
+                st.metric("🤖 Model Type", model_type)
+            
+            # Create and display visualization
+            fig = create_feature_importance_viz(results)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Show feature importance table
+            st.markdown("#### 📋 Feature Importance Rankings")
+            st.dataframe(results['importance_data'], use_container_width=True)
+            
+            # Download results
+            importance_csv = results['importance_data'].to_csv(index=False)
+            st.download_button(
+                "📥 Download Feature Importance",
+                data=importance_csv,
+                file_name=f"feature_importance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+    
+    elif analysis_type == "🔮 Predictive Modeling":
+        st.subheader("🔮 Predictive Modeling")
+        
+        numeric_columns = selected_df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(numeric_columns) < 2:
+            st.error("❌ Need at least 2 numeric columns for predictions")
+            return
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            target_column = st.selectbox("🎯 Target Column", numeric_columns)
+        with col2:
+            forecast_periods = st.slider("📅 Forecast Periods", 10, 100, 30)
+        with col3:
+            if st.button("🚀 Generate Predictions"):
+                with st.spinner("🔮 Generating predictions..."):
+                    results, error = analytics.create_predictions(selected_df, target_column, forecast_periods)
+                    
+                    if error:
+                        st.error(f"❌ {error}")
+                    else:
+                        st.session_state.prediction_results = results
+                        st.success("✅ Predictions generated successfully!")
+        
+        # Display prediction results
+        if st.session_state.prediction_results:
+            st.markdown("### 📊 Prediction Results")
+            
+            results = st.session_state.prediction_results
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🎯 Target Column", results['target_column'])
+            with col2:
+                st.metric("🔮 Forecast Periods", results['forecast_periods'])
+            with col3:
+                model_type = results['model_type'].title()
+                st.metric("🤖 Model Type", model_type)
+            
+            # Create and display visualization
+            fig = create_prediction_viz(results)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Show prediction summary
+            st.markdown("#### 📋 Prediction Summary")
+            
+            if results['model_type'] == 'regression':
+                train_mse = mean_squared_error(results['train_actual'], results['train_predictions'])
+                test_mse = mean_squared_error(results['test_actual'], results['test_predictions'])
+                
+                summary_data = {
+                    'Metric': ['Train MSE', 'Test MSE', 'Avg Future Prediction'],
+                    'Value': [f"{train_mse:.4f}", f"{test_mse:.4f}", f"{np.mean(results['future_predictions']):.4f}"]
+                }
+            else:
+                train_acc = accuracy_score(results['train_actual'], results['train_predictions'])
+                test_acc = accuracy_score(results['test_actual'], results['test_predictions'])
+                
+                summary_data = {
+                    'Metric': ['Train Accuracy', 'Test Accuracy', 'Most Frequent Prediction'],
+                    'Value': [f"{train_acc:.4f}", f"{test_acc:.4f}", f"{max(set(results['future_predictions']), key=results['future_predictions'].count)}"]
+                }
+            
+            summary_df = pd.DataFrame(summary_data)
+            st.dataframe(summary_df, use_container_width=True)
+            
+            # Download predictions
+            predictions_df = pd.DataFrame({
+                'Period': range(1, len(results['future_predictions']) + 1),
+                'Predicted_Value': results['future_predictions']
+            })
+            
+            predictions_csv = predictions_df.to_csv(index=False)
+            st.download_button(
+                "📥 Download Predictions",
+                data=predictions_csv,
+                file_name=f"predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+    
+    st.markdown("---")
+    st.markdown("### 🎯 ML Insights Summary")
+    
+    insights_completed = []
+    if st.session_state.clustering_results:
+        insights_completed.append("🔍 Clustering Analysis")
+    if st.session_state.feature_importance_results:
+        insights_completed.append("📈 Feature Importance")
+    if st.session_state.prediction_results:
+        insights_completed.append("🔮 Predictive Modeling")
+    
+    if insights_completed:
+        st.success(f"✅ Completed: {', '.join(insights_completed)}")
+    else:
+        st.info("💡 Select an analysis type above to get started with ML insights!")
+
+# ================================
+# MAIN EXECUTION
+# ================================
+
+if __name__ == "__main__":
+    main()
