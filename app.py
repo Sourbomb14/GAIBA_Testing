@@ -129,10 +129,10 @@ class EnhancedBulkEmailSender:
             st.error(f"Yagmail connection failed: {e}")
             return False
     
-        def create_personalized_email(self, template, recipient_data):
-    """Create personalized email from template"""
-    try:
-        personalized_content = template
+    def create_personalized_email(self, template, recipient_data):
+        """Create personalized email from template"""
+        try:
+            personalized_content = template
         
         # Replace all placeholders with actual values
         for key, value in recipient_data.items():
@@ -144,9 +144,9 @@ class EnhancedBulkEmailSender:
             personalized_content = personalized_content.replace(placeholder_double, str(value))
         
         return personalized_content
-    except Exception as e:
-        st.error(f"Error personalizing email: {e}")
-        return template
+        except Exception as e:
+            st.error(f"Error personalizing email: {e}")
+            return template
 
     def send_bulk_emails_enhanced(self, df, subject, template, method="yagmail", delay_seconds=1):
         """Send bulk emails with enhanced tracking and progress"""
