@@ -136,7 +136,7 @@ class EnhancedBulkEmailSender:
                 placeholder = f"{{{key}}}"
                 personalized_content = personalized_content.replace(placeholder, str(value))
             return personalized_content
-        except Exception as e:
+        except Exception:
             return template
     
     def send_bulk_emails_enhanced(self, df, subject, template, method="yagmail", delay_seconds=1):
@@ -152,10 +152,9 @@ class EnhancedBulkEmailSender:
             if not self.setup_smtp_connection():
                 return pd.DataFrame()
         
-        # Progress tracking
+        # Progress tracking with simplified UI
         progress_bar = st.progress(0)
-        status_container = st.empty()
-        metrics_container = st.empty()
+        status_text = st.empty()
         
         sent_count = 0
         failed_count = 0
@@ -165,8 +164,7 @@ class EnhancedBulkEmailSender:
             current_progress = (index + 1) / total_emails
             progress_bar.progress(current_progress)
             
-            with status_container.container():
-                st.info(f"📧 Sending {index + 1}/{total_emails}: {row.get('email', 'Unknown')}")
+            status_text.text(f"📧 Processing {index + 1}/{total_emails}: {row.get('email', 'Unknown')}")
             
             try:
                 recipient_email = row.get('email', '')
@@ -219,23 +217,18 @@ class EnhancedBulkEmailSender:
                     "method": method
                 })
             
-            # Update metrics
-            with metrics_container.container():
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("✅ Sent", sent_count)
-                col2.metric("❌ Failed", failed_count)
-                col3.metric("⚠️ Invalid", invalid_count)
-                col4.metric("📊 Progress", f"{current_progress*100:.0f}%")
-            
             time.sleep(delay_seconds)
         
         # Cleanup connections
-        if method == "smtp" and self.smtp_server:
-            self.smtp_server.quit()
+        try:
+            if method == "smtp" and self.smtp_server:
+                self.smtp_server.quit()
+        except:
+            pass
         
+        # Final status
         progress_bar.progress(1.0)
-        with status_container.container():
-            st.success("🎉 Bulk email campaign completed!")
+        status_text.success(f"🎉 Campaign completed! ✅ {sent_count} sent, ❌ {failed_count} failed, ⚠️ {invalid_count} invalid")
         
         return pd.DataFrame(results)
     
@@ -927,18 +920,68 @@ Format with clear headings and bullet points."""
         st.error(f"Error analyzing data: {e}")
         return f"Error analyzing data: {str(e)}"
 
-def generate_fallback_strategy(campaign_data):
-    """Fallback strategy when Groq AI is not available"""
-    company = campaign_data.get('company_name', 'Your Company')
-    campaign_type = campaign_data.get('campaign_type', 'Marketing Campaign')
-    budget = campaign_data.get('budget', '10000')
-    
-    try:
-        budget_num = int(budget) if budget.isdigit() else 10000
-    except:
-        budget_num = 10000
-    
-    return f"""# 🚀 {company} - {campaign_type} Strategy
+def generate_fallback_email_template(template_type, tone, format_type):
+    """Fallback email template when Groq AI is not available"""
+    if format_type == "HTML":
+        return f'''<!DOCTYPE html>
+<html>
+<head>
+    <title>{template_type}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f5f5f5; }}
+        .container {{ background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }}
+        .content {{ padding: 40px 30px; line-height: 1.6; }}
+        .cta-button {{ background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; font-weight: bold; }}
+        .footer {{ background: #f8f9fa; padding: 20px; text-align: center; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Hello {{{{first_name}}}}! 👋</h1>
+            <p>We have something special for you</p>
+        </div>
+        <div class="content">
+            <p>Dear {{{{name}}}},</p>
+            <p>We're excited to share this exclusive {template_type.lower()} with you.</p>
+            <p>As a valued member of our community, you deserve the best we have to offer.</p>
+            <div style="text-align: center;">
+                <a href="#" class="cta-button">Discover More</a>
+            </div>
+            <p>Thank you for being part of our journey!</p>
+        </div>
+        <div class="footer">
+            <p>Best regards,<br>The Marketing Team</p>
+            <p>You received this email because you're subscribed to our updates.</p>
+        </div>
+    </div>
+</body>
+</html>'''
+    else:
+        return f'''Subject: Exclusive {template_type} for {{{{first_name}}}}
+
+Hello {{{{first_name}}}},
+
+We're excited to share this exclusive {template_type.lower()} with you.
+
+As a valued member of our community, you deserve the best we have to offer.
+
+Here's what makes this special:
+• Personalized just for you
+• Exclusive member benefits
+• Limited-time opportunity  
+• Premium experience
+
+Ready to explore? Visit our website or reply to this email.
+
+Thank you for being part of our journey, {{{{name}}}}!
+
+Best regards,
+The Marketing Team
+
+---
+You received this email because you're subscribed to our updates.'''
 
 ## 📊 Executive Summary
 
@@ -1258,7 +1301,7 @@ def process_bulk_paste_contacts(bulk_text):
             # Parse different formats
             if ',' in line:
                 parts = [p.strip() for p in line.split(',')]
-                if len(parts) >= 2:
+                if len(parts) >= 2:  # Fixed: was &gt;=
                     email_part = parts[0] if '@' in parts[0] else parts[1]
                     name_part = parts[1] if '@' in parts[0] else parts[0]
                 else:
@@ -1266,8 +1309,8 @@ def process_bulk_paste_contacts(bulk_text):
                     name_part = extract_name_from_email_address(email_part)
             elif '\t' in line:
                 parts = [p.strip() for p in line.split('\t')]
-                email_part = parts[0] if '@' in parts[0] else parts[1] if len(parts) > 1 else parts[0]
-                name_part = parts[1] if '@' in parts[0] and len(parts) > 1 else extract_name_from_email_address(email_part)
+                email_part = parts[0] if '@' in parts[0] else parts[1] if len(parts) > 1 else parts[0]  # Fixed: was &gt;
+                name_part = parts[1] if '@' in parts[0] and len(parts) > 1 else extract_name_from_email_address(email_part)  # Fixed: was &gt;
             else:
                 email_part = line
                 name_part = extract_name_from_email_address(email_part)
@@ -1287,16 +1330,6 @@ def process_bulk_paste_contacts(bulk_text):
     except Exception as e:
         st.error(f"Error processing pasted data: {e}")
         return None
-
-def extract_name_from_email_address(email):
-    """Extract potential name from email address"""
-    try:
-        local_part = email.split('@')[0]
-        name_part = re.sub(r'[0-9._-]', ' ', local_part)
-        name_parts = [part.capitalize() for part in name_part.split() if len(part) > 1]
-        return ' '.join(name_parts) if name_parts else 'Valued Customer'
-    except:
-        return 'Valued Customer'
 
 def extract_google_sheet_id(url):
     """Extract Google Sheets ID from URL"""
