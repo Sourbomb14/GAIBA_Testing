@@ -129,17 +129,25 @@ class EnhancedBulkEmailSender:
             st.error(f"Yagmail connection failed: {e}")
             return False
     
-    def create_personalized_email(self, template, recipient_data):
-        """Create personalized email from template"""
-        try:
-            personalized_content = template
-            for key, value in recipient_data.items():
-                placeholder = f"{{{key}}}"
-                personalized_content = personalized_content.replace(placeholder, str(value))
-            return personalized_content
-        except Exception:
-            return template
-    
+        def create_personalized_email(self, template, recipient_data):
+    """Create personalized email from template"""
+    try:
+        personalized_content = template
+        
+        # Replace all placeholders with actual values
+        for key, value in recipient_data.items():
+            # Handle both single and double brace formats
+            placeholder_single = f"{{{key}}}"
+            placeholder_double = f"{{{{{key}}}}}"
+            
+            personalized_content = personalized_content.replace(placeholder_single, str(value))
+            personalized_content = personalized_content.replace(placeholder_double, str(value))
+        
+        return personalized_content
+    except Exception as e:
+        st.error(f"Error personalizing email: {e}")
+        return template
+
     def send_bulk_emails_enhanced(self, df, subject, template, method="yagmail", delay_seconds=1):
         """Send bulk emails with enhanced tracking and progress"""
         results = []
@@ -167,7 +175,7 @@ class EnhancedBulkEmailSender:
             
             status_text.text(f"📧 Processing {index + 1}/{total_emails}: {row.get('email', 'Unknown')}")
             
-            try:
+                        try:
                 recipient_email = row.get('email', '')
                 if not recipient_email or not self.validate_email(recipient_email):
                     invalid_count += 1
@@ -181,21 +189,42 @@ class EnhancedBulkEmailSender:
                     })
                     continue
                 
-                # Personalize content
-                personalized_content = self.create_personalized_email(template, row.to_dict())
-                personalized_subject = self.create_personalized_email(subject, row.to_dict())
+                # Extract first name from full name for better personalization
+                full_name = row.get('name', 'Valued Customer')
+                first_name = full_name.split()[0] if full_name and full_name != 'Valued Customer' else 'Friend'
                 
-                # Send email based on method
+                # Create personalization data dictionary
+                personalization_data = {
+                    'name': full_name,
+                    'first_name': first_name,
+                    'email': recipient_email
+                }
+                
+                # CRITICAL FIX: Personalize BOTH subject and content
+                personalized_subject = self.create_personalized_email(subject, personalization_data)
+                personalized_content = self.create_personalized_email(template, personalization_data)
+
+                
+                                # Send email based on method
                 if method == "yagmail":
-                    self.yag.send(to=recipient_email, subject=personalized_subject, contents=personalized_content)
+                    self.yag.send(
+                        to=recipient_email, 
+                        subject=personalized_subject, 
+                        contents=personalized_content
+                    )
                 else:
                     msg = MIMEMultipart()
                     msg['From'] = self.gmail_address
                     msg['To'] = recipient_email
                     msg['Subject'] = personalized_subject
-                    msg.attach(MIMEText(personalized_content, 'html'))
+                    
+                    # Determine content type based on template format
+                    content_type = 'html' if '<html>' in template.lower() or '<div>' in template.lower() else 'plain'
+                    msg.attach(MIMEText(personalized_content, content_type))
+                    
                     text = msg.as_string()
                     self.smtp_server.sendmail(self.gmail_address, recipient_email, text)
+
                 
                 sent_count += 1
                 results.append({
