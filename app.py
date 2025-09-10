@@ -95,6 +95,7 @@ def initialize_session_state():
     for var in session_vars:
         if var not in st.session_state:
             st.session_state[var] = defaults.get(var, None)
+
 # ================================
 # ENHANCED BULK EMAIL SENDER CLASS
 # ================================
@@ -239,6 +240,7 @@ class EnhancedBulkEmailSender:
             return True
         except EmailNotValidError:
             return False
+
 # ================================
 # ADVANCED ANALYTICS CLASS
 # ================================
@@ -453,8 +455,571 @@ class AdvancedAnalytics:
             
         except Exception as e:
             return None, f"Prediction error: {str(e)}"
+
 # ================================
-# ENHANCED VISUALIZATION FUNCTIONS
+# GROQ AI FUNCTIONS
+# ================================
+
+def generate_campaign_strategy_with_groq(campaign_data):
+    """Generate comprehensive campaign strategy using Groq API"""
+    if not GROQ_API_KEY:
+        return generate_fallback_strategy(campaign_data)
+    
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        channels_str = ', '.join(campaign_data.get('channels', ['Email Marketing']))
+        
+        prompt = f"""Create a comprehensive, professional marketing campaign strategy for:
+
+CAMPAIGN DETAILS:
+- Company: {campaign_data.get('company_name', 'Company')}
+- Campaign Type: {campaign_data.get('campaign_type', 'Marketing Campaign')}
+- Target Audience: {campaign_data.get('target_audience', 'General audience')}
+- Geographic Focus: {campaign_data.get('location', 'Global')}
+- Marketing Channels: {channels_str}
+- Budget: {campaign_data.get('budget', 'TBD')} {campaign_data.get('currency', 'USD')}
+- Duration: {campaign_data.get('duration', 'TBD')}
+- Customer Segment: {campaign_data.get('customer_segment', 'Mass Market')}
+- Product/Service: {campaign_data.get('product_description', 'Product/Service')}
+
+Please provide a detailed, actionable strategy with:
+1. Executive Summary with key metrics
+2. Target Audience Analysis with demographics
+3. Competitive Positioning
+4. Messaging Strategy with key themes
+5. Channel-Specific Tactics with implementation details
+6. Content Strategy and calendar
+7. Timeline & Milestones with specific dates
+8. Budget Allocation with detailed breakdown
+9. Success Metrics & KPIs
+10. Risk Management strategies
+11. Next Steps with priority actions
+
+Use emojis, tables, and clear formatting for better readability. Make this practical and actionable."""
+
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a world-class marketing strategist with 20+ years of experience. Create detailed, actionable marketing campaigns with specific tactics and measurable outcomes."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            model=GROQ_MODEL,
+            temperature=0.7,
+            max_tokens=4000
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        st.error(f"Error generating campaign with Groq: {e}")
+        return generate_fallback_strategy(campaign_data)
+
+def generate_email_template_with_groq(template_type, tone, format_type, campaign_context=None):
+    """Generate clean email templates using Groq AI"""
+    if not GROQ_API_KEY:
+        return generate_fallback_email_template(template_type, tone, format_type)
+    
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        context_info = f"Campaign Context: {campaign_context}" if campaign_context else "General marketing campaign"
+        
+        prompt = f"""Create a professional {template_type.lower()} email template with a {tone.lower()} tone.
+Format: {format_type}
+{context_info}
+
+Requirements:
+1. Include personalization placeholders: {{{{first_name}}}}, {{{{name}}}}, {{{{email}}}}
+2. Make it engaging and action-oriented
+3. Include a clear call-to-action
+4. Use modern, professional design
+5. Make it mobile-friendly
+6. IMPORTANT: Provide ONLY the clean template content without any explanations or instructions
+
+{"Generate HTML email with inline CSS styling - ONLY the HTML code" if format_type == "HTML" else "Generate plain text email with proper formatting - ONLY the email text"}"""
+
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert email marketing specialist. Create ONLY clean, ready-to-use email templates without any explanations. Provide ONLY the template content."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            model=GROQ_MODEL,
+            temperature=0.8,
+            max_tokens=2000
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        st.error(f"Error generating email template: {e}")
+        return generate_fallback_email_template(template_type, tone, format_type)
+
+def analyze_data_with_groq(df, file_info):
+    """Analyze uploaded data using Groq AI"""
+    if not GROQ_API_KEY:
+        return "Groq AI not available for data analysis. Please configure API key."
+    
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        # Safe JSON serialization
+        def safe_json_serializable(o):
+            if isinstance(o, (pd.Timestamp, pd.Timedelta)):
+                return str(o)
+            elif pd.isna(o):
+                return None
+            raise TypeError(f"Type {type(o)} not serializable")
+        
+        sample_data = df.head(5).to_dict(orient='records')
+        
+        prompt = f"""You are a professional data analyst. Analyze this dataset:
+
+FILE INFO: {file_info}
+DATASET SHAPE: {df.shape[0]} rows, {df.shape[1]} columns
+COLUMNS: {list(df.columns)}
+SAMPLE DATA (first 5 rows):
+{json.dumps(sample_data, indent=2, default=safe_json_serializable)}
+
+Please provide a comprehensive analysis including:
+
+1. **DATA SUMMARY & STATISTICS**
+2. **KEY INSIGHTS & TRENDS** 
+3. **RECOMMENDED VISUALIZATIONS**
+   - Suggest specific chart types
+   - Recommend columns to visualize together
+4. **DATA QUALITY ASSESSMENT**
+5. **BUSINESS RECOMMENDATIONS**
+   - Actionable insights for management
+   - Strategic recommendations
+
+Format with clear headings and bullet points."""
+
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert data analyst. Provide thorough, actionable analysis with clear insights and strategic recommendations."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            model=GROQ_MODEL,
+            temperature=0.3,
+            max_tokens=3000
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        st.error(f"Error analyzing data: {e}")
+        return f"Error analyzing data: {str(e)}"
+
+def generate_fallback_strategy(campaign_data):
+    """Fallback strategy when Groq AI is not available"""
+    company = campaign_data.get('company_name', 'Your Company')
+    campaign_type = campaign_data.get('campaign_type', 'Marketing Campaign')
+    budget = campaign_data.get('budget', '10000')
+    
+    try:
+        budget_num = int(budget) if budget.isdigit() else 10000
+    except:
+        budget_num = 10000
+    
+    return f"""# 🚀 {company} - {campaign_type} Strategy
+
+## 📊 Executive Summary
+
+| Metric | Value |
+|--------|-------|
+| **Campaign Type** | {campaign_type} |
+| **Target Market** | {campaign_data.get('location', 'Global')} |
+| **Budget** | {budget} {campaign_data.get('currency', 'USD')} |
+| **Duration** | {campaign_data.get('duration', '8 weeks')} |
+| **Channels** | {', '.join(campaign_data.get('channels', ['Email Marketing']))} |
+
+## 👥 Target Audience Analysis
+🎯 **Primary Audience:** {campaign_data.get('target_audience', 'Target audience to be defined')}
+
+**📍 Geographic Focus:** {campaign_data.get('location', 'Global')}
+**💼 Customer Segment:** {campaign_data.get('customer_segment', 'Mass Market')}
+
+## 📢 Channel Strategy
+Selected Channels: {', '.join(campaign_data.get('channels', ['Email Marketing']))}
+
+### Email Marketing Strategy
+- 👋 Welcome series for new subscribers  
+- 🚀 Promotional campaigns for product launches
+- 🔄 Re-engagement campaigns for inactive users
+- 🎯 Personalized product recommendations
+
+## 💰 Budget Allocation Breakdown
+
+| Category | Percentage | Amount |
+|----------|------------|--------|
+| 🎨 Creative Development | 25% | ${budget_num * 0.25:,.0f} |
+| 📺 Media/Advertising | 45% | ${budget_num * 0.45:,.0f} |
+| 🔧 Technology & Tools | 20% | ${budget_num * 0.20:,.0f} |
+| 📊 Analytics & Optimization | 10% | ${budget_num * 0.10:,.0f} |
+
+## 📈 Success Metrics Dashboard
+- **👥 Reach:** Target audience exposure tracking
+- **💬 Engagement:** Click-through rates and interactions
+- **💰 Conversions:** Lead generation and sales metrics  
+- **📊 ROI:** Return on advertising spend analysis
+
+## 🚀 Next Steps Checklist
+- [ ] ✅ Approve campaign strategy and budget
+- [ ] 🎨 Develop creative assets and content
+- [ ] 📊 Set up tracking and analytics systems
+- [ ] 🚀 Launch pilot campaign phase
+- [ ] 📈 Monitor performance and optimize continuously
+
+---
+*🗓️ Campaign strategy generated on {datetime.now().strftime('%B %d, %Y')}*
+*🤖 Powered by AI Marketing Intelligence*"""
+
+def generate_fallback_email_template(template_type, tone, format_type):
+    """Fallback email template when Groq AI is not available"""
+    if format_type == "HTML":
+        return f'''<!DOCTYPE html>
+<html>
+<head>
+    <title>{template_type}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f5f5f5; }}
+        .container {{ background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }}
+        .content {{ padding: 40px 30px; line-height: 1.6; }}
+        .cta-button {{ background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; font-weight: bold; }}
+        .footer {{ background: #f8f9fa; padding: 20px; text-align: center; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Hello {{{{first_name}}}}! 👋</h1>
+            <p>We have something special for you</p>
+        </div>
+        <div class="content">
+            <p>Dear {{{{name}}}},</p>
+            <p>We're excited to share this exclusive {template_type.lower()} with you.</p>
+            <p>As a valued member of our community, you deserve the best we have to offer.</p>
+            <div style="text-align: center;">
+                <a href="#" class="cta-button">Discover More</a>
+            </div>
+            <p>Thank you for being part of our journey!</p>
+        </div>
+        <div class="footer">
+            <p>Best regards,<br>The Marketing Team</p>
+            <p>You received this email because you're subscribed to our updates.</p>
+        </div>
+    </div>
+</body>
+</html>'''
+    else:
+        return f'''Subject: Exclusive {template_type} for {{{{first_name}}}}
+
+Hello {{{{first_name}}}},
+
+We're excited to share this exclusive {template_type.lower()} with you.
+
+As a valued member of our community, you deserve the best we have to offer.
+
+Here's what makes this special:
+• Personalized just for you
+• Exclusive member benefits
+• Limited-time opportunity  
+• Premium experience
+
+Ready to explore? Visit our website or reply to this email.
+
+Thank you for being part of our journey, {{{{name}}}}!
+
+Best regards,
+The Marketing Team
+
+---
+You received this email because you're subscribed to our updates.'''
+
+# ================================
+# IMAGE GENERATION FUNCTIONS
+# ================================
+
+def generate_campaign_image_hf(campaign_description):
+    """Generate campaign image using HuggingFace FLUX.1-dev model"""
+    if not HUGGING_FACE_TOKEN:
+        st.warning("⚠️ HuggingFace token not configured")
+        return generate_placeholder_image(campaign_description)
+    
+    try:
+        enhanced_prompt = f"Professional marketing campaign image for {campaign_description}, high quality, vibrant colors, modern design, commercial photography, eye-catching, brand advertisement, 4K resolution, clean layout"
+        
+        API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+        headers = {"Authorization": f"Bearer {HUGGING_FACE_TOKEN}"}
+        
+        payload = {
+            "inputs": enhanced_prompt,
+            "parameters": {
+                "num_inference_steps": 20,
+                "guidance_scale": 7.5,
+                "width": 512,
+                "height": 512
+            }
+        }
+        
+        with st.spinner(f"🎨 Generating image with {HF_MODEL}..."):
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                image_bytes = response.content
+                image = Image.open(io.BytesIO(image_bytes))
+                
+                # Store in session state
+                image_data = {
+                    'prompt': enhanced_prompt,
+                    'timestamp': datetime.now(),
+                    'campaign': campaign_description,
+                    'image': image,
+                    'model': HF_MODEL
+                }
+                
+                st.session_state.generated_images.append(image_data)
+                
+                st.success(f"✨ Campaign image generated successfully!")
+                return image
+                
+            else:
+                st.warning(f"Image generation failed: {response.status_code}")
+                return generate_placeholder_image(campaign_description)
+                
+    except Exception as e:
+        st.error(f"Error generating image: {e}")
+        return generate_placeholder_image(campaign_description)
+
+def generate_placeholder_image(campaign_description):
+    """Generate professional placeholder image"""
+    try:
+        width, height = 512, 512
+        image = Image.new('RGB', (width, height), color='#1e3a8a')
+        draw = ImageDraw.Draw(image)
+        
+        # Create gradient effect
+        for y in range(height):
+            color_value = int(30 + (y / height) * 60)
+            for x in range(width):
+                draw.point((x, y), fill=(color_value, color_value + 20, color_value + 60))
+        
+        title = "🚀 CAMPAIGN IMAGE"
+        subtitle = campaign_description[:50] + "..." if len(campaign_description) > 50 else campaign_description
+        
+        try:
+            title_font = ImageFont.truetype("arial.ttf", 28)
+            subtitle_font = ImageFont.truetype("arial.ttf", 16)
+        except:
+            title_font = ImageFont.load_default()
+            subtitle_font = ImageFont.load_default()
+        
+        # Draw title
+        title_bbox = draw.textbbox((0, 0), title, font=title_font)
+        title_width = title_bbox[2] - title_bbox[0]
+        title_x = (width - title_width) // 2
+        draw.text((title_x, height//2 - 60), title, fill='white', font=title_font)
+        
+        # Draw subtitle
+        wrapped_text = textwrap.fill(subtitle, width=35)
+        subtitle_bbox = draw.textbbox((0, 0), wrapped_text, font=subtitle_font)
+        subtitle_width = subtitle_bbox[2] - subtitle_bbox[0]
+        subtitle_x = (width - subtitle_width) // 2
+        draw.text((subtitle_x, height//2 + 20), wrapped_text, fill='#e0e7ff', font=subtitle_font)
+        
+        # Store in session state
+        image_data = {
+            'prompt': f"Placeholder for: {campaign_description}",
+            'timestamp': datetime.now(),
+            'campaign': campaign_description,
+            'image': image,
+            'model': 'placeholder'
+        }
+        
+        st.session_state.generated_images.append(image_data)
+        
+        st.success("📷 Generated professional placeholder image")
+        return image
+        
+    except Exception as e:
+        st.error(f"Error creating placeholder: {e}")
+        return None
+
+# ================================
+# DATA PROCESSING FUNCTIONS
+# ================================
+
+def process_uploaded_data_file(uploaded_file):
+    """Process various file formats for data analysis"""
+    try:
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+        
+        if file_extension == 'csv':
+            df = pd.read_csv(uploaded_file)
+        elif file_extension in ['xlsx', 'xls']:
+            df = pd.read_excel(uploaded_file)
+        elif file_extension == 'json':
+            data = json.load(uploaded_file)
+            if isinstance(data, list):
+                df = pd.DataFrame(data)
+            else:
+                df = pd.json_normalize(data)
+        else:
+            st.error("Unsupported file format. Please upload CSV, Excel, or JSON files.")
+            return None
+            
+        return df
+        
+    except Exception as e:
+        st.error(f"Error processing file: {e}")
+        return None
+
+def process_contacts_data_file(uploaded_file):
+    """Process uploaded contacts file"""
+    df = process_uploaded_data_file(uploaded_file)
+    if df is None:
+        return None
+    
+    # Standardize contact data format
+    df.columns = df.columns.str.lower()
+    
+    email_col = None
+    name_col = None
+    
+    # Find email column
+    for col in df.columns:
+        if any(keyword in col for keyword in ['email', 'mail', 'e-mail']):
+            email_col = col
+            break
+    
+    # Find name column
+    for col in df.columns:
+        if any(keyword in col for keyword in ['name', 'first', 'last', 'full']):
+            name_col = col
+            break
+    
+    if email_col is None:
+        st.error("❌ No email column found. Please ensure your data has an 'email' column.")
+        return None
+    
+    result_data = []
+    
+    for _, row in df.iterrows():
+        email = row[email_col]
+        if pd.isna(email) or str(email).strip() == '':
+            continue
+        
+        email = str(email).strip().lower()
+        
+        if name_col and not pd.isna(row[name_col]):
+            name = str(row[name_col]).strip()
+        else:
+            name = extract_name_from_email_address(email)
+        
+        try:
+            validate_email(email)
+            result_data.append({'email': email, 'name': name})
+        except EmailNotValidError:
+            continue
+    
+    if not result_data:
+        st.error("❌ No valid emails found")
+        return None
+    
+    return pd.DataFrame(result_data)
+
+def process_bulk_paste_contacts(bulk_text):
+    """Process bulk pasted contact data"""
+    try:
+        lines = bulk_text.strip().split('\n')
+        contacts = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Parse different formats
+            if ',' in line:
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) >= 2:
+                    email_part = parts[0] if '@' in parts[0] else parts[1]
+                    name_part = parts[1] if '@' in parts[0] else parts[0]
+                else:
+                    email_part = parts[0]
+                    name_part = extract_name_from_email_address(email_part)
+            elif '\t' in line:
+                parts = [p.strip() for p in line.split('\t')]
+                email_part = parts[0] if '@' in parts[0] else parts[1] if len(parts) > 1 else parts[0]
+                name_part = parts[1] if '@' in parts[0] and len(parts) > 1 else extract_name_from_email_address(email_part)
+            else:
+                email_part = line
+                name_part = extract_name_from_email_address(email_part)
+            
+            try:
+                validate_email(email_part)
+                contacts.append({'email': email_part.lower(), 'name': name_part})
+            except EmailNotValidError:
+                continue
+        
+        if not contacts:
+            st.error("No valid emails found in pasted text")
+            return None
+            
+        return pd.DataFrame(contacts)
+        
+    except Exception as e:
+        st.error(f"Error processing pasted data: {e}")
+        return None
+
+def extract_name_from_email_address(email):
+    """Extract potential name from email address"""
+    try:
+        local_part = email.split('@')[0]
+        name_part = re.sub(r'[0-9._-]', ' ', local_part)
+        name_parts = [part.capitalize() for part in name_part.split() if len(part) > 1]
+        return ' '.join(name_parts) if name_parts else 'Valued Customer'
+    except:
+        return 'Valued Customer'
+
+def extract_google_sheet_id(url):
+    """Extract Google Sheets ID from URL"""
+    try:
+        if '/spreadsheets/d/' in url:
+            return url.split('/spreadsheets/d/')[1].split('/')[0]
+        return None
+    except:
+        return None
+
+def validate_email_format(email):
+    """Validate email format"""
+    try:
+        validate_email(email)
+        return True
+    except EmailNotValidError:
+        return False
+
+# ================================
+# VISUALIZATION FUNCTIONS
 # ================================
 
 def create_enhanced_clustering_viz(clustering_results):
@@ -748,605 +1313,7 @@ def create_prediction_viz(prediction_results):
     )
     
     return fig
-# ================================
-# GROQ AI FUNCTIONS
-# ================================
 
-def generate_campaign_strategy_with_groq(campaign_data):
-    """Generate comprehensive campaign strategy using Groq API"""
-    if not GROQ_API_KEY:
-        return generate_fallback_strategy(campaign_data)
-    
-    try:
-        client = Groq(api_key=GROQ_API_KEY)
-        
-        channels_str = ', '.join(campaign_data.get('channels', ['Email Marketing']))
-        
-        prompt = f"""Create a comprehensive, professional marketing campaign strategy for:
-
-CAMPAIGN DETAILS:
-- Company: {campaign_data.get('company_name', 'Company')}
-- Campaign Type: {campaign_data.get('campaign_type', 'Marketing Campaign')}
-- Target Audience: {campaign_data.get('target_audience', 'General audience')}
-- Geographic Focus: {campaign_data.get('location', 'Global')}
-- Marketing Channels: {channels_str}
-- Budget: {campaign_data.get('budget', 'TBD')} {campaign_data.get('currency', 'USD')}
-- Duration: {campaign_data.get('duration', 'TBD')}
-- Customer Segment: {campaign_data.get('customer_segment', 'Mass Market')}
-- Product/Service: {campaign_data.get('product_description', 'Product/Service')}
-
-Please provide a detailed, actionable strategy with:
-1. Executive Summary with key metrics
-2. Target Audience Analysis with demographics
-3. Competitive Positioning
-4. Messaging Strategy with key themes
-5. Channel-Specific Tactics with implementation details
-6. Content Strategy and calendar
-7. Timeline & Milestones with specific dates
-8. Budget Allocation with detailed breakdown
-9. Success Metrics & KPIs
-10. Risk Management strategies
-11. Next Steps with priority actions
-
-Use emojis, tables, and clear formatting for better readability. Make this practical and actionable."""
-
-        response = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a world-class marketing strategist with 20+ years of experience. Create detailed, actionable marketing campaigns with specific tactics and measurable outcomes."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            model=GROQ_MODEL,
-            temperature=0.7,
-            max_tokens=4000
-        )
-        
-        return response.choices[0].message.content
-        
-    except Exception as e:
-        st.error(f"Error generating campaign with Groq: {e}")
-        return generate_fallback_strategy(campaign_data)
-
-def generate_email_template_with_groq(template_type, tone, format_type, campaign_context=None):
-    """Generate clean email templates using Groq AI"""
-    if not GROQ_API_KEY:
-        return generate_fallback_email_template(template_type, tone, format_type)
-    
-    try:
-        client = Groq(api_key=GROQ_API_KEY)
-        
-        context_info = f"Campaign Context: {campaign_context}" if campaign_context else "General marketing campaign"
-        
-        prompt = f"""Create a professional {template_type.lower()} email template with a {tone.lower()} tone.
-Format: {format_type}
-{context_info}
-
-Requirements:
-1. Include personalization placeholders: {{{{first_name}}}}, {{{{name}}}}, {{{{email}}}}
-2. Make it engaging and action-oriented
-3. Include a clear call-to-action
-4. Use modern, professional design
-5. Make it mobile-friendly
-6. IMPORTANT: Provide ONLY the clean template content without any explanations or instructions
-
-{"Generate HTML email with inline CSS styling - ONLY the HTML code" if format_type == "HTML" else "Generate plain text email with proper formatting - ONLY the email text"}"""
-
-        response = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an expert email marketing specialist. Create ONLY clean, ready-to-use email templates without any explanations. Provide ONLY the template content."
-                },
-                {
-                    "role": "user", 
-                    "content": prompt
-                }
-            ],
-            model=GROQ_MODEL,
-            temperature=0.8,
-            max_tokens=2000
-        )
-        
-        return response.choices[0].message.content
-        
-    except Exception as e:
-        st.error(f"Error generating email template: {e}")
-        return generate_fallback_email_template(template_type, tone, format_type)
-
-def analyze_data_with_groq(df, file_info):
-    """Analyze uploaded data using Groq AI"""
-    if not GROQ_API_KEY:
-        return "Groq AI not available for data analysis. Please configure API key."
-    
-    try:
-        client = Groq(api_key=GROQ_API_KEY)
-        
-        # Safe JSON serialization
-        def safe_json_serializable(o):
-            if isinstance(o, (pd.Timestamp, pd.Timedelta)):
-                return str(o)
-            elif pd.isna(o):
-                return None
-            raise TypeError(f"Type {type(o)} not serializable")
-        
-        sample_data = df.head(5).to_dict(orient='records')
-        
-        prompt = f"""You are a professional data analyst. Analyze this dataset:
-
-FILE INFO: {file_info}
-DATASET SHAPE: {df.shape[0]} rows, {df.shape[1]} columns
-COLUMNS: {list(df.columns)}
-SAMPLE DATA (first 5 rows):
-{json.dumps(sample_data, indent=2, default=safe_json_serializable)}
-
-Please provide a comprehensive analysis including:
-
-1. **DATA SUMMARY & STATISTICS**
-2. **KEY INSIGHTS & TRENDS** 
-3. **RECOMMENDED VISUALIZATIONS**
-   - Suggest specific chart types
-   - Recommend columns to visualize together
-4. **DATA QUALITY ASSESSMENT**
-5. **BUSINESS RECOMMENDATIONS**
-   - Actionable insights for management
-   - Strategic recommendations
-
-Format with clear headings and bullet points."""
-
-        response = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an expert data analyst. Provide thorough, actionable analysis with clear insights and strategic recommendations."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            model=GROQ_MODEL,
-            temperature=0.3,
-            max_tokens=3000
-        )
-        
-        return response.choices[0].message.content
-        
-    except Exception as e:
-        st.error(f"Error analyzing data: {e}")
-        return f"Error analyzing data: {str(e)}"
-
-def generate_fallback_email_template(template_type, tone, format_type):
-    """Fallback email template when Groq AI is not available"""
-    if format_type == "HTML":
-        return f'''<!DOCTYPE html>
-<html>
-<head>
-    <title>{template_type}</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f5f5f5; }}
-        .container {{ background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }}
-        .content {{ padding: 40px 30px; line-height: 1.6; }}
-        .cta-button {{ background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; font-weight: bold; }}
-        .footer {{ background: #f8f9fa; padding: 20px; text-align: center; color: #666; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Hello {{{{first_name}}}}! 👋</h1>
-            <p>We have something special for you</p>
-        </div>
-        <div class="content">
-            <p>Dear {{{{name}}}},</p>
-            <p>We're excited to share this exclusive {template_type.lower()} with you.</p>
-            <p>As a valued member of our community, you deserve the best we have to offer.</p>
-            <div style="text-align: center;">
-                <a href="#" class="cta-button">Discover More</a>
-            </div>
-            <p>Thank you for being part of our journey!</p>
-        </div>
-        <div class="footer">
-            <p>Best regards,<br>The Marketing Team</p>
-            <p>You received this email because you're subscribed to our updates.</p>
-        </div>
-    </div>
-</body>
-</html>'''
-    else:
-        return f'''Subject: Exclusive {template_type} for {{{{first_name}}}}
-
-Hello {{{{first_name}}}},
-
-We're excited to share this exclusive {template_type.lower()} with you.
-
-As a valued member of our community, you deserve the best we have to offer.
-
-Here's what makes this special:
-• Personalized just for you
-• Exclusive member benefits
-• Limited-time opportunity  
-• Premium experience
-
-Ready to explore? Visit our website or reply to this email.
-
-Thank you for being part of our journey, {{{{name}}}}!
-
-Best regards,
-The Marketing Team
-
----
-You received this email because you're subscribed to our updates.'''
-
-## 📊 Executive Summary
-
-| Metric | Value |
-|--------|-------|
-| **Campaign Type** | {campaign_type} |
-| **Target Market** | {campaign_data.get('location', 'Global')} |
-| **Budget** | {budget} {campaign_data.get('currency', 'USD')} |
-| **Duration** | {campaign_data.get('duration', '8 weeks')} |
-| **Channels** | {', '.join(campaign_data.get('channels', ['Email Marketing']))} |
-
-## 👥 Target Audience Analysis
-🎯 **Primary Audience:** {campaign_data.get('target_audience', 'Target audience to be defined')}
-
-**📍 Geographic Focus:** {campaign_data.get('location', 'Global')}
-**💼 Customer Segment:** {campaign_data.get('customer_segment', 'Mass Market')}
-
-## 📢 Channel Strategy
-Selected Channels: {', '.join(campaign_data.get('channels', ['Email Marketing']))}
-
-### Email Marketing Strategy
-- 👋 Welcome series for new subscribers  
-- 🚀 Promotional campaigns for product launches
-- 🔄 Re-engagement campaigns for inactive users
-- 🎯 Personalized product recommendations
-
-## 💰 Budget Allocation Breakdown
-
-| Category | Percentage | Amount |
-|----------|------------|--------|
-| 🎨 Creative Development | 25% | ${budget_num * 0.25:,.0f} |
-| 📺 Media/Advertising | 45% | ${budget_num * 0.45:,.0f} |
-| 🔧 Technology & Tools | 20% | ${budget_num * 0.20:,.0f} |
-| 📊 Analytics & Optimization | 10% | ${budget_num * 0.10:,.0f} |
-
-## 📈 Success Metrics Dashboard
-- **👥 Reach:** Target audience exposure tracking
-- **💬 Engagement:** Click-through rates and interactions
-- **💰 Conversions:** Lead generation and sales metrics  
-- **📊 ROI:** Return on advertising spend analysis
-
-## 🚀 Next Steps Checklist
-- [ ] ✅ Approve campaign strategy and budget
-- [ ] 🎨 Develop creative assets and content
-- [ ] 📊 Set up tracking and analytics systems
-- [ ] 🚀 Launch pilot campaign phase
-- [ ] 📈 Monitor performance and optimize continuously
-
----
-*🗓️ Campaign strategy generated on {datetime.now().strftime('%B %d, %Y')}*
-*🤖 Powered by AI Marketing Intelligence*"""
-
-def generate_fallback_email_template(template_type, tone, format_type):
-    """Fallback email template when Groq AI is not available"""
-    if format_type == "HTML":
-        return f'''<!DOCTYPE html>
-<html>
-<head>
-    <title>{template_type}</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f5f5f5; }}
-        .container {{ background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }}
-        .content {{ padding: 40px 30px; line-height: 1.6; }}
-        .cta-button {{ background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; font-weight: bold; }}
-        .footer {{ background: #f8f9fa; padding: 20px; text-align: center; color: #666; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Hello {{{{first_name}}}}! 👋</h1>
-            <p>We have something special for you</p>
-        </div>
-        <div class="content">
-            <p>Dear {{{{name}}}},</p>
-            <p>We're excited to share this exclusive {template_type.lower()} with you.</p>
-            <p>As a valued member of our community, you deserve the best we have to offer.</p>
-            <div style="text-align: center;">
-                <a href="#" class="cta-button">Discover More</a>
-            </div>
-            <p>Thank you for being part of our journey!</p>
-        </div>
-        <div class="footer">
-            <p>Best regards,<br>The Marketing Team</p>
-            <p>You received this email because you're subscribed to our updates.</p>
-        </div>
-    </div>
-</body>
-</html>'''
-    else:
-        return f'''Subject: Exclusive {template_type} for {{{{first_name}}}}
-
-Hello {{{{first_name}}}},
-
-We're excited to share this exclusive {template_type.lower()} with you.
-
-As a valued member of our community, you deserve the best we have to offer.
-
-Here's what makes this special:
-• Personalized just for you
-• Exclusive member benefits
-• Limited-time opportunity  
-• Premium experience
-
-Ready to explore? Visit our website or reply to this email.
-
-Thank you for being part of our journey, {{{{name}}}}!
-
-Best regards,
-The Marketing Team
-
----
-You received this email because you're subscribed to our updates.'''
-# ================================
-# IMAGE GENERATION FUNCTIONS
-# ================================
-
-def generate_campaign_image_hf(campaign_description):
-    """Generate campaign image using HuggingFace FLUX.1-dev model"""
-    if not HUGGING_FACE_TOKEN:
-        st.warning("⚠️ HuggingFace token not configured")
-        return generate_placeholder_image(campaign_description)
-    
-    try:
-        enhanced_prompt = f"Professional marketing campaign image for {campaign_description}, high quality, vibrant colors, modern design, commercial photography, eye-catching, brand advertisement, 4K resolution, clean layout"
-        
-        API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-        headers = {"Authorization": f"Bearer {HUGGING_FACE_TOKEN}"}
-        
-        payload = {
-            "inputs": enhanced_prompt,
-            "parameters": {
-                "num_inference_steps": 20,
-                "guidance_scale": 7.5,
-                "width": 512,
-                "height": 512
-            }
-        }
-        
-        with st.spinner(f"🎨 Generating image with {HF_MODEL}..."):
-            response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
-            
-            if response.status_code == 200:
-                image_bytes = response.content
-                image = Image.open(io.BytesIO(image_bytes))
-                
-                # Store in session state
-                image_data = {
-                    'prompt': enhanced_prompt,
-                    'timestamp': datetime.now(),
-                    'campaign': campaign_description,
-                    'image': image,
-                    'model': HF_MODEL
-                }
-                
-                st.session_state.generated_images.append(image_data)
-                
-                st.success(f"✨ Campaign image generated successfully!")
-                return image
-                
-            else:
-                st.warning(f"Image generation failed: {response.status_code}")
-                return generate_placeholder_image(campaign_description)
-                
-    except Exception as e:
-        st.error(f"Error generating image: {e}")
-        return generate_placeholder_image(campaign_description)
-
-def generate_placeholder_image(campaign_description):
-    """Generate professional placeholder image"""
-    try:
-        width, height = 512, 512
-        image = Image.new('RGB', (width, height), color='#1e3a8a')
-        draw = ImageDraw.Draw(image)
-        
-        # Create gradient effect
-        for y in range(height):
-            color_value = int(30 + (y / height) * 60)
-            for x in range(width):
-                draw.point((x, y), fill=(color_value, color_value + 20, color_value + 60))
-        
-        title = "🚀 CAMPAIGN IMAGE"
-        subtitle = campaign_description[:50] + "..." if len(campaign_description) > 50 else campaign_description
-        
-        try:
-            title_font = ImageFont.truetype("arial.ttf", 28)
-            subtitle_font = ImageFont.truetype("arial.ttf", 16)
-        except:
-            title_font = ImageFont.load_default()
-            subtitle_font = ImageFont.load_default()
-        
-        # Draw title
-        title_bbox = draw.textbbox((0, 0), title, font=title_font)
-        title_width = title_bbox[2] - title_bbox[0]
-        title_x = (width - title_width) // 2
-        draw.text((title_x, height//2 - 60), title, fill='white', font=title_font)
-        
-        # Draw subtitle
-        wrapped_text = textwrap.fill(subtitle, width=35)
-        subtitle_bbox = draw.textbbox((0, 0), wrapped_text, font=subtitle_font)
-        subtitle_width = subtitle_bbox[2] - subtitle_bbox[0]
-        subtitle_x = (width - subtitle_width) // 2
-        draw.text((subtitle_x, height//2 + 20), wrapped_text, fill='#e0e7ff', font=subtitle_font)
-        
-        # Store in session state
-        image_data = {
-            'prompt': f"Placeholder for: {campaign_description}",
-            'timestamp': datetime.now(),
-            'campaign': campaign_description,
-            'image': image,
-            'model': 'placeholder'
-        }
-        
-        st.session_state.generated_images.append(image_data)
-        
-        st.success("📷 Generated professional placeholder image")
-        return image
-        
-    except Exception as e:
-        st.error(f"Error creating placeholder: {e}")
-        return None
-# ================================
-# DATA PROCESSING FUNCTIONS
-# ================================
-
-def process_uploaded_data_file(uploaded_file):
-    """Process various file formats for data analysis"""
-    try:
-        file_extension = uploaded_file.name.split('.')[-1].lower()
-        
-        if file_extension == 'csv':
-            df = pd.read_csv(uploaded_file)
-        elif file_extension in ['xlsx', 'xls']:
-            df = pd.read_excel(uploaded_file)
-        elif file_extension == 'json':
-            data = json.load(uploaded_file)
-            if isinstance(data, list):
-                df = pd.DataFrame(data)
-            else:
-                df = pd.json_normalize(data)
-        else:
-            st.error("Unsupported file format. Please upload CSV, Excel, or JSON files.")
-            return None
-            
-        return df
-        
-    except Exception as e:
-        st.error(f"Error processing file: {e}")
-        return None
-
-def process_contacts_data_file(uploaded_file):
-    """Process uploaded contacts file"""
-    df = process_uploaded_data_file(uploaded_file)
-    if df is None:
-        return None
-    
-    # Standardize contact data format
-    df.columns = df.columns.str.lower()
-    
-    email_col = None
-    name_col = None
-    
-    # Find email column
-    for col in df.columns:
-        if any(keyword in col for keyword in ['email', 'mail', 'e-mail']):
-            email_col = col
-            break
-    
-    # Find name column
-    for col in df.columns:
-        if any(keyword in col for keyword in ['name', 'first', 'last', 'full']):
-            name_col = col
-            break
-    
-    if email_col is None:
-        st.error("❌ No email column found. Please ensure your data has an 'email' column.")
-        return None
-    
-    result_data = []
-    
-    for _, row in df.iterrows():
-        email = row[email_col]
-        if pd.isna(email) or str(email).strip() == '':
-            continue
-        
-        email = str(email).strip().lower()
-        
-        if name_col and not pd.isna(row[name_col]):
-            name = str(row[name_col]).strip()
-        else:
-            name = extract_name_from_email_address(email)
-        
-        try:
-            validate_email(email)
-            result_data.append({'email': email, 'name': name})
-        except EmailNotValidError:
-            continue
-    
-    if not result_data:
-        st.error("❌ No valid emails found")
-        return None
-    
-    return pd.DataFrame(result_data)
-
-def process_bulk_paste_contacts(bulk_text):
-    """Process bulk pasted contact data"""
-    try:
-        lines = bulk_text.strip().split('\n')
-        contacts = []
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-                
-            # Parse different formats
-            if ',' in line:
-                parts = [p.strip() for p in line.split(',')]
-                if len(parts) >= 2:  # Fixed: was &gt;=
-                    email_part = parts[0] if '@' in parts[0] else parts[1]
-                    name_part = parts[1] if '@' in parts[0] else parts[0]
-                else:
-                    email_part = parts[0]
-                    name_part = extract_name_from_email_address(email_part)
-            elif '\t' in line:
-                parts = [p.strip() for p in line.split('\t')]
-                email_part = parts[0] if '@' in parts[0] else parts[1] if len(parts) > 1 else parts[0]  # Fixed: was &gt;
-                name_part = parts[1] if '@' in parts[0] and len(parts) > 1 else extract_name_from_email_address(email_part)  # Fixed: was &gt;
-            else:
-                email_part = line
-                name_part = extract_name_from_email_address(email_part)
-            
-            try:
-                validate_email(email_part)
-                contacts.append({'email': email_part.lower(), 'name': name_part})
-            except EmailNotValidError:
-                continue
-        
-        if not contacts:
-            st.error("No valid emails found in pasted text")
-            return None
-            
-        return pd.DataFrame(contacts)
-        
-    except Exception as e:
-        st.error(f"Error processing pasted data: {e}")
-        return None
-
-def extract_google_sheet_id(url):
-    """Extract Google Sheets ID from URL"""
-    try:
-        if '/spreadsheets/d/' in url:
-            return url.split('/spreadsheets/d/')[1].split('/')[0]
-        return None
-    except:
-        return None
-
-def validate_email_format(email):
-    """Validate email format"""
-    try:
-        validate_email(email)
-        return True
-    except EmailNotValidError:
-        return False
 # ================================
 # MAIN APPLICATION
 # ================================
@@ -1524,6 +1491,7 @@ def main():
         show_advanced_analytics_page()
     elif st.session_state.current_page == "ML Insights":
         show_ml_insights_page()
+
 # ================================
 # PAGE FUNCTIONS
 # ================================
@@ -1962,6 +1930,7 @@ def show_email_marketing_page():
     
     else:
         st.info("📧 **Getting Started:** Configure email settings, generate templates, load contacts, then launch campaigns!")
+
 def show_advanced_analytics_page():
     """Enhanced analytics page with data upload and AI analysis"""
     st.header("📊 Campaign Analytics & Data Intelligence Platform")
@@ -2059,7 +2028,7 @@ def show_advanced_analytics_page():
                         use_container_width=True
                     )
     
-    # Email campaign results analysis
+       # Email campaign results analysis
     if st.session_state.campaign_results is not None:
         st.markdown("---")
         st.subheader("📧 Email Campaign Performance Analysis")
@@ -2363,6 +2332,80 @@ def show_ml_insights_page():
         st.success(f"✅ Completed: {', '.join(insights_completed)}")
     else:
         st.info("💡 Select an analysis type above to get started with ML insights!")
+
+def extract_name_from_email_address(email):
+    """Extract potential name from email address"""
+    try:
+        local_part = email.split('@')[0]
+        name_part = re.sub(r'[0-9._-]', ' ', local_part)
+        name_parts = [part.capitalize() for part in name_part.split() if len(part) > 1]
+        return ' '.join(name_parts) if name_parts else 'Valued Customer'
+    except:
+        return 'Valued Customer'
+
+def generate_fallback_strategy(campaign_data):
+    """Fallback strategy when Groq AI is not available"""
+    company = campaign_data.get('company_name', 'Your Company')
+    campaign_type = campaign_data.get('campaign_type', 'Marketing Campaign')
+    budget = campaign_data.get('budget', '10000')
+    
+    try:
+        budget_num = int(budget) if budget.isdigit() else 10000
+    except:
+        budget_num = 10000
+    
+    return f"""# 🚀 {company} - {campaign_type} Strategy
+
+## 📊 Executive Summary
+
+| Metric | Value |
+|--------|-------|
+| **Campaign Type** | {campaign_type} |
+| **Target Market** | {campaign_data.get('location', 'Global')} |
+| **Budget** | {budget} {campaign_data.get('currency', 'USD')} |
+| **Duration** | {campaign_data.get('duration', '8 weeks')} |
+| **Channels** | {', '.join(campaign_data.get('channels', ['Email Marketing']))} |
+
+## 👥 Target Audience Analysis
+🎯 **Primary Audience:** {campaign_data.get('target_audience', 'Target audience to be defined')}
+
+**📍 Geographic Focus:** {campaign_data.get('location', 'Global')}
+**💼 Customer Segment:** {campaign_data.get('customer_segment', 'Mass Market')}
+
+## 📢 Channel Strategy
+Selected Channels: {', '.join(campaign_data.get('channels', ['Email Marketing']))}
+
+### Email Marketing Strategy
+- 👋 Welcome series for new subscribers  
+- 🚀 Promotional campaigns for product launches
+- 🔄 Re-engagement campaigns for inactive users
+- 🎯 Personalized product recommendations
+
+## 💰 Budget Allocation Breakdown
+
+| Category | Percentage | Amount |
+|----------|------------|--------|
+| 🎨 Creative Development | 25% | ${budget_num * 0.25:,.0f} |
+| 📺 Media/Advertising | 45% | ${budget_num * 0.45:,.0f} |
+| 🔧 Technology & Tools | 20% | ${budget_num * 0.20:,.0f} |
+| 📊 Analytics & Optimization | 10% | ${budget_num * 0.10:,.0f} |
+
+## 📈 Success Metrics Dashboard
+- **👥 Reach:** Target audience exposure tracking
+- **💬 Engagement:** Click-through rates and interactions
+- **💰 Conversions:** Lead generation and sales metrics  
+- **📊 ROI:** Return on advertising spend analysis
+
+## 🚀 Next Steps Checklist
+- [ ] ✅ Approve campaign strategy and budget
+- [ ] 🎨 Develop creative assets and content
+- [ ] 📊 Set up tracking and analytics systems
+- [ ] 🚀 Launch pilot campaign phase
+- [ ] 📈 Monitor performance and optimize continuously
+
+---
+*🗓️ Campaign strategy generated on {datetime.now().strftime('%B %d, %Y')}*
+*🤖 Powered by AI Marketing Intelligence*"""
 
 # ================================
 # MAIN EXECUTION
