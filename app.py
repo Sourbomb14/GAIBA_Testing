@@ -97,7 +97,7 @@ def initialize_session_state():
             st.session_state[var] = defaults.get(var, None)
 
 # ================================
-# ENHANCED BULK EMAIL SENDER CLASS
+# ENHANCED BULK EMAIL SENDER CLASS - FIXED VERSION
 # ================================
 
 class EnhancedBulkEmailSender:
@@ -133,17 +133,17 @@ class EnhancedBulkEmailSender:
         """Create personalized email from template"""
         try:
             personalized_content = template
-        
-        # Replace all placeholders with actual values
-        for key, value in recipient_data.items():
-            # Handle both single and double brace formats
-            placeholder_single = f"{{{key}}}"
-            placeholder_double = f"{{{{{key}}}}}"
             
-            personalized_content = personalized_content.replace(placeholder_single, str(value))
-            personalized_content = personalized_content.replace(placeholder_double, str(value))
-        
-        return personalized_content
+            # Replace all placeholders with actual values
+            for key, value in recipient_data.items():
+                # Handle both single and double brace formats
+                placeholder_single = f"{{{key}}}"
+                placeholder_double = f"{{{{{key}}}}}"
+                
+                personalized_content = personalized_content.replace(placeholder_single, str(value))
+                personalized_content = personalized_content.replace(placeholder_double, str(value))
+            
+            return personalized_content
         except Exception as e:
             st.error(f"Error personalizing email: {e}")
             return template
@@ -175,7 +175,7 @@ class EnhancedBulkEmailSender:
             
             status_text.text(f"📧 Processing {index + 1}/{total_emails}: {row.get('email', 'Unknown')}")
             
-                        try:
+            try:
                 recipient_email = row.get('email', '')
                 if not recipient_email or not self.validate_email(recipient_email):
                     invalid_count += 1
@@ -203,9 +203,8 @@ class EnhancedBulkEmailSender:
                 # CRITICAL FIX: Personalize BOTH subject and content
                 personalized_subject = self.create_personalized_email(subject, personalization_data)
                 personalized_content = self.create_personalized_email(template, personalization_data)
-
                 
-                                # Send email based on method
+                # Send email based on method
                 if method == "yagmail":
                     self.yag.send(
                         to=recipient_email, 
@@ -224,12 +223,11 @@ class EnhancedBulkEmailSender:
                     
                     text = msg.as_string()
                     self.smtp_server.sendmail(self.gmail_address, recipient_email, text)
-
                 
                 sent_count += 1
                 results.append({
                     "email": recipient_email,
-                    "name": row.get('name', 'Unknown'),
+                    "name": full_name,
                     "status": "sent",
                     "error": "",
                     "timestamp": datetime.now().strftime('%H:%M:%S'),
@@ -1889,7 +1887,7 @@ def show_email_marketing_page():
             except Exception as e:
                 st.error(f"❌ Test failed: {str(e)}")
         
-                # Bulk campaign launch with proper state management
+        # Bulk campaign launch with proper state management
         st.markdown("### 🚀 Bulk Email Campaign Launch")
         
         # Initialize confirmation state
@@ -1983,6 +1981,9 @@ def show_email_marketing_page():
                 if st.button("❌ CANCEL", use_container_width=True):
                     st.session_state.confirm_send = False
                     st.rerun()
+    
+    else:
+        st.info("📧 **Getting Started:** Configure email settings, generate templates, load contacts, then launch campaigns!")
 
 def show_advanced_analytics_page():
     """Enhanced analytics page with data upload and AI analysis"""
@@ -2081,7 +2082,7 @@ def show_advanced_analytics_page():
                         use_container_width=True
                     )
     
-       # Email campaign results analysis
+        # Email campaign results analysis
     if st.session_state.campaign_results is not None:
         st.markdown("---")
         st.subheader("📧 Email Campaign Performance Analysis")
@@ -2133,8 +2134,99 @@ def show_advanced_analytics_page():
                 fig.update_layout(template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
         
+        # Enhanced campaign performance metrics
+        if total_sent > 0:
+            st.markdown("### 📈 Detailed Campaign Performance")
+            
+            # Time-based analysis
+            results_df['timestamp'] = pd.to_datetime(results_df['timestamp'], format='%H:%M:%S', errors='coerce')
+            
+            # Email sending rate analysis
+            sent_results = results_df[results_df['status'] == 'sent'].copy()
+            if not sent_results.empty:
+                sent_results['minute'] = sent_results['timestamp'].dt.floor('min')
+                sending_rate = sent_results.groupby('minute').size().reset_index(name='emails_per_minute')
+                
+                if len(sending_rate) > 1:
+                    fig = px.line(
+                        sending_rate, 
+                        x='minute', 
+                        y='emails_per_minute',
+                        title="Email Sending Rate Over Time",
+                        markers=True
+                    )
+                    fig.update_layout(template="plotly_dark")
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            # Success rate by email domain
+            domain_success = results_df.groupby(results_df['email'].str.split('@').str[1]).agg({
+                'status': ['count', lambda x: (x == 'sent').sum()]
+            }).round(2)
+            domain_success.columns = ['Total', 'Sent']
+            domain_success['Success_Rate'] = (domain_success['Sent'] / domain_success['Total'] * 100).round(1)
+            domain_success = domain_success.sort_values('Success_Rate', ascending=False).head(10)
+            
+            if not domain_success.empty:
+                st.markdown("#### 🎯 Success Rate by Email Domain")
+                fig = px.bar(
+                    x=domain_success.index,
+                    y=domain_success['Success_Rate'],
+                    title="Success Rate by Email Domain (%)",
+                    color=domain_success['Success_Rate'],
+                    color_continuous_scale='RdYlGn'
+                )
+                fig.update_layout(template="plotly_dark")
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Domain performance table
+                st.dataframe(domain_success, use_container_width=True)
+        
+        # Campaign insights and recommendations
+        st.markdown("### 💡 Campaign Insights & Recommendations")
+        
+        insights = []
+        if success_rate >= 80:
+            insights.append("🎉 **Excellent Performance**: Your campaign achieved outstanding delivery rates!")
+        elif success_rate >= 60:
+            insights.append("✅ **Good Performance**: Solid delivery rates with room for optimization.")
+        else:
+            insights.append("⚠️ **Needs Improvement**: Consider reviewing email list quality and content.")
+        
+        if total_invalid > 0:
+            invalid_rate = (total_invalid / len(results_df)) * 100
+            if invalid_rate > 10:
+                insights.append(f"🔍 **Email List Hygiene**: {invalid_rate:.1f}% invalid emails detected. Consider list cleaning.")
+        
+        if total_failed > 0:
+            failure_rate = (total_failed / len(results_df)) * 100
+            if failure_rate > 5:
+                insights.append(f"🚨 **Delivery Issues**: {failure_rate:.1f}% delivery failures. Check email content and sender reputation.")
+        
+        for insight in insights:
+            st.markdown(insight)
+        
         with st.expander("📋 View Detailed Email Campaign Results"):
             st.dataframe(results_df, use_container_width=True)
+        
+        # Export detailed report
+        if st.button("📊 Generate Campaign Report"):
+            report_data = {
+                'Campaign Summary': [
+                    f"Total Emails Sent: {len(results_df)}",
+                    f"Successfully Delivered: {total_sent} ({success_rate:.1f}%)",
+                    f"Failed Deliveries: {total_failed}",
+                    f"Invalid Addresses: {total_invalid}",
+                    f"Campaign Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                ]
+            }
+            
+            report_text = "\n".join(report_data['Campaign Summary'])
+            st.download_button(
+                "📥 Download Campaign Report",
+                data=report_text,
+                file_name=f"campaign_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain"
+            )
 
 def show_ml_insights_page():
     """Advanced ML insights page with clustering, feature importance, and predictions"""
@@ -2223,6 +2315,22 @@ def show_ml_insights_page():
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
             
+            # Cluster insights
+            st.markdown("#### 🔍 Cluster Insights")
+            for i in range(results['n_clusters']):
+                cluster_data = results['clustered_data'][results['clustered_data']['Cluster'] == i]
+                cluster_size = len(cluster_data)
+                cluster_percentage = (cluster_size / len(results['clustered_data'])) * 100
+                
+                st.markdown(f"**Cluster {i}**: {cluster_size} items ({cluster_percentage:.1f}% of data)")
+                
+                # Show cluster characteristics
+                numeric_cols = cluster_data.select_dtypes(include=[np.number]).columns
+                if len(numeric_cols) > 0:
+                    cluster_stats = cluster_data[numeric_cols].mean()
+                    top_features = cluster_stats.nlargest(3)
+                    st.markdown(f"  - Key characteristics: {', '.join([f'{col}: {val:.2f}' for col, val in top_features.items()])}")
+            
             # Download clustered data
             clustered_csv = results['clustered_data'].to_csv(index=False)
             st.download_button(
@@ -2274,6 +2382,16 @@ def show_ml_insights_page():
             fig = create_feature_importance_viz(results)
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
+            
+            # Feature insights
+            st.markdown("#### 🔍 Feature Insights")
+            importance_data = results['importance_data']
+            top_3_features = importance_data.head(3)
+            
+            st.markdown("**Most Important Features:**")
+            for idx, row in top_3_features.iterrows():
+                importance_pct = row['Importance'] * 100
+                st.markdown(f"  - **{row['Feature']}**: {importance_pct:.1f}% importance")
             
             # Show feature importance table
             st.markdown("#### 📋 Feature Importance Rankings")
@@ -2333,6 +2451,16 @@ def show_ml_insights_page():
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
             
+            # Prediction insights
+            st.markdown("#### 🔍 Prediction Insights")
+            future_predictions = results['future_predictions']
+            avg_prediction = np.mean(future_predictions)
+            trend = "increasing" if future_predictions[-1] > future_predictions[0] else "decreasing"
+            
+            st.markdown(f"  - **Average Future Value**: {avg_prediction:.2f}")
+            st.markdown(f"  - **Trend Direction**: {trend.title()}")
+            st.markdown(f"  - **Prediction Range**: {min(future_predictions):.2f} to {max(future_predictions):.2f}")
+            
             # Show prediction summary
             st.markdown("#### 📋 Prediction Summary")
             
@@ -2370,6 +2498,7 @@ def show_ml_insights_page():
                 mime="text/csv"
             )
     
+    # ML Insights Summary
     st.markdown("---")
     st.markdown("### 🎯 ML Insights Summary")
     
@@ -2383,82 +2512,72 @@ def show_ml_insights_page():
     
     if insights_completed:
         st.success(f"✅ Completed: {', '.join(insights_completed)}")
+        
+        # Generate comprehensive ML report
+        if st.button("📊 Generate ML Analysis Report"):
+            report_sections = []
+            
+            if st.session_state.clustering_results:
+                results = st.session_state.clustering_results
+                report_sections.append(f"""
+CLUSTERING ANALYSIS REPORT
+==========================
+- Number of Clusters: {results['n_clusters']}
+- Silhouette Score: {results['silhouette_score']:.3f}
+- PCA Variance Explained: {sum(results['pca_variance_ratio']):.3f}
+- Dataset Size: {len(results['clustered_data'])} records
+                """)
+            
+            if st.session_state.feature_importance_results:
+                results = st.session_state.feature_importance_results
+                top_features = results['importance_data'].head(5)
+                features_text = "\n".join([f"  - {row['Feature']}: {row['Importance']:.4f}" for _, row in top_features.iterrows()])
+                report_sections.append(f"""
+FEATURE IMPORTANCE ANALYSIS REPORT
+==================================
+- Target Column: {results['target_column']}
+- Model Type: {results['model_type'].title()}
+- Features Analyzed: {len(results['feature_columns'])}
+- Top 5 Important Features:
+{features_text}
+                """)
+            
+            if st.session_state.prediction_results:
+                results = st.session_state.prediction_results
+                avg_prediction = np.mean(results['future_predictions'])
+                report_sections.append(f"""
+PREDICTIVE MODELING REPORT
+==========================
+- Target Column: {results['target_column']}
+- Model Type: {results['model_type'].title()}
+- Forecast Periods: {results['forecast_periods']}
+- Average Future Prediction: {avg_prediction:.4f}
+- Prediction Range: {min(results['future_predictions']):.4f} to {max(results['future_predictions']):.4f}
+                """)
+            
+            full_report = f"""
+COMPREHENSIVE ML ANALYSIS REPORT
+================================
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Dataset: {selected_dataset_name}
+
+{"".join(report_sections)}
+
+ANALYSIS SUMMARY
+================
+Completed Analyses: {', '.join(insights_completed)}
+
+This report was generated by the Marketing Campaign War Room ML Analytics Engine.
+            """
+            
+            st.download_button(
+                "📥 Download ML Analysis Report",
+                data=full_report,
+                file_name=f"ml_analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain"
+            )
     else:
         st.info("💡 Select an analysis type above to get started with ML insights!")
-
-def extract_name_from_email_address(email):
-    """Extract potential name from email address"""
-    try:
-        local_part = email.split('@')[0]
-        name_part = re.sub(r'[0-9._-]', ' ', local_part)
-        name_parts = [part.capitalize() for part in name_part.split() if len(part) > 1]
-        return ' '.join(name_parts) if name_parts else 'Valued Customer'
-    except:
-        return 'Valued Customer'
-
-def generate_fallback_strategy(campaign_data):
-    """Fallback strategy when Groq AI is not available"""
-    company = campaign_data.get('company_name', 'Your Company')
-    campaign_type = campaign_data.get('campaign_type', 'Marketing Campaign')
-    budget = campaign_data.get('budget', '10000')
-    
-    try:
-        budget_num = int(budget) if budget.isdigit() else 10000
-    except:
-        budget_num = 10000
-    
-    return f"""# 🚀 {company} - {campaign_type} Strategy
-
-## 📊 Executive Summary
-
-| Metric | Value |
-|--------|-------|
-| **Campaign Type** | {campaign_type} |
-| **Target Market** | {campaign_data.get('location', 'Global')} |
-| **Budget** | {budget} {campaign_data.get('currency', 'USD')} |
-| **Duration** | {campaign_data.get('duration', '8 weeks')} |
-| **Channels** | {', '.join(campaign_data.get('channels', ['Email Marketing']))} |
-
-## 👥 Target Audience Analysis
-🎯 **Primary Audience:** {campaign_data.get('target_audience', 'Target audience to be defined')}
-
-**📍 Geographic Focus:** {campaign_data.get('location', 'Global')}
-**💼 Customer Segment:** {campaign_data.get('customer_segment', 'Mass Market')}
-
-## 📢 Channel Strategy
-Selected Channels: {', '.join(campaign_data.get('channels', ['Email Marketing']))}
-
-### Email Marketing Strategy
-- 👋 Welcome series for new subscribers  
-- 🚀 Promotional campaigns for product launches
-- 🔄 Re-engagement campaigns for inactive users
-- 🎯 Personalized product recommendations
-
-## 💰 Budget Allocation Breakdown
-
-| Category | Percentage | Amount |
-|----------|------------|--------|
-| 🎨 Creative Development | 25% | ${budget_num * 0.25:,.0f} |
-| 📺 Media/Advertising | 45% | ${budget_num * 0.45:,.0f} |
-| 🔧 Technology & Tools | 20% | ${budget_num * 0.20:,.0f} |
-| 📊 Analytics & Optimization | 10% | ${budget_num * 0.10:,.0f} |
-
-## 📈 Success Metrics Dashboard
-- **👥 Reach:** Target audience exposure tracking
-- **💬 Engagement:** Click-through rates and interactions
-- **💰 Conversions:** Lead generation and sales metrics  
-- **📊 ROI:** Return on advertising spend analysis
-
-## 🚀 Next Steps Checklist
-- [ ] ✅ Approve campaign strategy and budget
-- [ ] 🎨 Develop creative assets and content
-- [ ] 📊 Set up tracking and analytics systems
-- [ ] 🚀 Launch pilot campaign phase
-- [ ] 📈 Monitor performance and optimize continuously
-
----
-*🗓️ Campaign strategy generated on {datetime.now().strftime('%B %d, %Y')}*
-*🤖 Powered by AI Marketing Intelligence*"""
 
 # ================================
 # MAIN EXECUTION
