@@ -1860,76 +1860,100 @@ def show_email_marketing_page():
             except Exception as e:
                 st.error(f"❌ Test failed: {str(e)}")
         
-        # Bulk campaign launch
-        if st.button("🚀 LAUNCH ENHANCED BULK EMAIL CAMPAIGN", type="primary", use_container_width=True):
-            st.warning(f"⚠️ About to send {len(df)} personalized emails. This action cannot be undone!")
+                # Bulk campaign launch with proper state management
+        st.markdown("### 🚀 Bulk Email Campaign Launch")
+        
+        # Initialize confirmation state
+        if 'confirm_send' not in st.session_state:
+            st.session_state.confirm_send = False
+        
+        # First button - shows warning and confirmation
+        if not st.session_state.confirm_send:
+            if st.button("🚀 LAUNCH ENHANCED BULK EMAIL CAMPAIGN", type="primary", use_container_width=True):
+                st.session_state.confirm_send = True
+                st.rerun()
+        
+        # Confirmation stage
+        if st.session_state.confirm_send:
+            st.warning(f"⚠️ About to send {len(df)} personalized emails to all recipients!")
+            st.markdown("**This action cannot be undone. Are you sure?**")
             
-            if st.button("✅ YES, SEND ALL EMAILS NOW", key="final_confirm", type="primary"):
-                st.info("🚀 Starting enhanced bulk email campaign...")
-                
-                try:
-                    email_sender = EnhancedBulkEmailSender(sender_email, sender_password)
-                    method = "yagmail" if email_method == "YagMail (Recommended)" else "smtp"
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("✅ YES, SEND ALL EMAILS NOW", type="primary", use_container_width=True):
+                    st.session_state.confirm_send = False
+                    st.info("🚀 Starting enhanced bulk email campaign...")
                     
-                    results = email_sender.send_bulk_emails_enhanced(df, bulk_subject, template_to_use, method, delay_seconds)
-                    
-                    if not results.empty:
-                        success_count = len(results[results['status'] == 'sent'])
-                        failed_count = len(results[results['status'] == 'failed'])
-                        invalid_count = len(results[results['status'] == 'invalid'])
-                        success_rate = (success_count / len(results)) * 100
+                    try:
+                        email_sender = EnhancedBulkEmailSender(sender_email, sender_password)
+                        method = "yagmail" if email_method == "YagMail (Recommended)" else "smtp"
                         
-                        st.markdown("### 🎉 Enhanced Campaign Results")
+                        results = email_sender.send_bulk_emails_enhanced(df, bulk_subject, template_to_use, method, delay_seconds)
                         
-                        result_col1, result_col2, result_col3, result_col4 = st.columns(4)
-                        
-                        with result_col1:
-                            st.markdown(f'<div class="success-metric">✅ Successfully Sent<br><h2>{success_count}</h2></div>', unsafe_allow_html=True)
-                        with result_col2:
-                            st.markdown(f'<div class="metric-card">❌ Failed<br><strong>{failed_count}</strong></div>', unsafe_allow_html=True)
-                        with result_col3:
-                            st.markdown(f'<div class="metric-card">⚠️ Invalid<br><strong>{invalid_count}</strong></div>', unsafe_allow_html=True)
-                        with result_col4:
-                            st.markdown(f'<div class="metric-card">📊 Success Rate<br><strong>{success_rate:.1f}%</strong></div>', unsafe_allow_html=True)
-                        
-                        st.session_state.campaign_results = results
-                        
-                        # Enhanced results analysis
-                        if success_count > 0:
-                            st.markdown("### 📈 Campaign Analysis")
+                        if not results.empty:
+                            success_count = len(results[results['status'] == 'sent'])
+                            failed_count = len(results[results['status'] == 'failed'])
+                            invalid_count = len(results[results['status'] == 'invalid'])
+                            success_rate = (success_count / len(results)) * 100
                             
-                            # Domain analysis
-                            sent_results = results[results['status'] == 'sent']
-                            domain_analysis = sent_results['email'].str.split('@').str[1].value_counts().head(10)
+                            st.markdown("### 🎉 Enhanced Campaign Results")
                             
-                            fig = px.bar(
-                                x=domain_analysis.index,
-                                y=domain_analysis.values,
-                                title="Top Email Domains Reached",
-                                color_discrete_sequence=['#28a745']
+                            result_col1, result_col2, result_col3, result_col4 = st.columns(4)
+                            
+                            with result_col1:
+                                st.markdown(f'<div class="success-metric">✅ Successfully Sent<br><h2>{success_count}</h2></div>', unsafe_allow_html=True)
+                            with result_col2:
+                                st.markdown(f'<div class="metric-card">❌ Failed<br><strong>{failed_count}</strong></div>', unsafe_allow_html=True)
+                            with result_col3:
+                                st.markdown(f'<div class="metric-card">⚠️ Invalid<br><strong>{invalid_count}</strong></div>', unsafe_allow_html=True)
+                            with result_col4:
+                                st.markdown(f'<div class="metric-card">📊 Success Rate<br><strong>{success_rate:.1f}%</strong></div>', unsafe_allow_html=True)
+                            
+                            st.session_state.campaign_results = results
+                            
+                            # Enhanced results analysis
+                            if success_count > 0:
+                                st.markdown("### 📈 Campaign Analysis")
+                                
+                                # Domain analysis
+                                sent_results = results[results['status'] == 'sent']
+                                domain_analysis = sent_results['email'].str.split('@').str[1].value_counts().head(10)
+                                
+                                fig = px.bar(
+                                    x=domain_analysis.index,
+                                    y=domain_analysis.values,
+                                    title="Top Email Domains Reached",
+                                    color_discrete_sequence=['#28a745']
+                                )
+                                fig.update_layout(template="plotly_dark")
+                                st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Download results
+                            csv_data = results.to_csv(index=False)
+                            st.download_button(
+                                "📥 Download Campaign Results",
+                                data=csv_data,
+                                file_name=f"enhanced_campaign_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv"
                             )
-                            fig.update_layout(template="plotly_dark")
-                            st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Download results
-                        csv_data = results.to_csv(index=False)
-                        st.download_button(
-                            "📥 Download Campaign Results",
-                            data=csv_data,
-                            file_name=f"enhanced_campaign_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime="text/csv"
-                        )
-                        
-                        with st.expander("📋 View Detailed Campaign Results"):
-                            st.dataframe(results, use_container_width=True)
-                        
-                        if success_count > 0:
-                            st.balloons()
-                except Exception as e:
-                    st.error(f"❌ Campaign error: {str(e)}")
-    
-    else:
-        st.info("📧 **Getting Started:** Configure email settings, generate templates, load contacts, then launch campaigns!")
+                            
+                            with st.expander("📋 View Detailed Campaign Results"):
+                                st.dataframe(results, use_container_width=True)
+                            
+                            if success_count > 0:
+                                st.balloons()
+                        else:
+                            st.error("❌ No emails were sent. Please check your configuration.")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Campaign error: {str(e)}")
+                        st.session_state.confirm_send = False
+            
+            with col2:
+                if st.button("❌ CANCEL", use_container_width=True):
+                    st.session_state.confirm_send = False
+                    st.rerun()
 
 def show_advanced_analytics_page():
     """Enhanced analytics page with data upload and AI analysis"""
