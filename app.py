@@ -747,9 +747,8 @@ Please provide a comprehensive analysis including:
 
 1. **DATA SUMMARY & STATISTICS**
 2. **KEY INSIGHTS & TRENDS** 
-3. **RECOMMENDED VISUALIZATIONS**
-   - Suggest specific chart types
-   - Recommend columns to visualize together
+3. **MAKE VISUALIZATIONS**
+   - Make meaningful visualisations from the data using python code and display the result
 4. **DATA QUALITY ASSESSMENT**
 5. **BUSINESS RECOMMENDATIONS**
    - Actionable insights for management
