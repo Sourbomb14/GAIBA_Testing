@@ -2345,6 +2345,22 @@ def show_ml_insights_page():
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
             
+            # Cluster insights
+            st.markdown("#### 🔍 Cluster Insights")
+            for i in range(results['n_clusters']):
+                cluster_data = results['clustered_data'][results['clustered_data']['Cluster'] == i]
+                cluster_size = len(cluster_data)
+                cluster_percentage = (cluster_size / len(results['clustered_data'])) * 100
+                
+                st.markdown(f"**Cluster {i}**: {cluster_size} items ({cluster_percentage:.1f}% of data)")
+                
+                # Show cluster characteristics
+                numeric_cols = cluster_data.select_dtypes(include=[np.number]).columns
+                if len(numeric_cols) > 0:
+                    cluster_stats = cluster_data[numeric_cols].mean()
+                    top_features = cluster_stats.nlargest(3)
+                    st.markdown(f"  - Key characteristics: {', '.join([f'{col}: {val:.2f}' for col, val in top_features.items()])}")
+            
             # Download clustered data
             clustered_csv = results['clustered_data'].to_csv(index=False)
             st.download_button(
@@ -2354,9 +2370,245 @@ def show_ml_insights_page():
                 mime="text/csv"
             )
 
-# ================================
-# GROQ AI FUNCTIONS WITH ENHANCED SYSTEM PROMPTS
-# ================================
+    # ✅ ADD THIS MISSING SECTION FOR FEATURE IMPORTANCE
+    elif analysis_type == "📈 Feature Importance":
+        st.subheader("📈 Feature Importance Analysis")
+        
+        numeric_columns = selected_df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(numeric_columns) < 2:
+            st.error("❌ Need at least 2 numeric columns for feature importance analysis")
+            return
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            target_column = st.selectbox("🎯 Target Column", numeric_columns)
+        with col2:
+            if st.button("🚀 Calculate Feature Importance"):
+                with st.spinner("📈 Calculating feature importance..."):
+                    results, error = analytics.calculate_feature_importance(selected_df, target_column)
+                    
+                    if error:
+                        st.error(f"❌ {error}")
+                    else:
+                        st.session_state.feature_importance_results = results
+                        st.success("✅ Feature importance analysis completed!")
+        
+        # Display feature importance results
+        if st.session_state.feature_importance_results:
+            st.markdown("### 📊 Feature Importance Results")
+            
+            results = st.session_state.feature_importance_results
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🎯 Target Column", results['target_column'])
+            with col2:
+                st.metric("📊 Features Analyzed", len(results['feature_columns']))
+            with col3:
+                model_type = results['model_type'].title()
+                st.metric("🤖 Model Type", model_type)
+            
+            # Create and display visualization
+            fig = create_feature_importance_viz(results)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Feature insights
+            st.markdown("#### 🔍 Feature Insights")
+            importance_data = results['importance_data']
+            top_3_features = importance_data.head(3)
+            
+            st.markdown("**Most Important Features:**")
+            for idx, row in top_3_features.iterrows():
+                importance_pct = row['Importance'] * 100
+                st.markdown(f"  - **{row['Feature']}**: {importance_pct:.1f}% importance")
+            
+            # Show feature importance table
+            st.markdown("#### 📋 Feature Importance Rankings")
+            st.dataframe(results['importance_data'], use_container_width=True)
+            
+            # Download results
+            importance_csv = results['importance_data'].to_csv(index=False)
+            st.download_button(
+                "📥 Download Feature Importance",
+                data=importance_csv,
+                file_name=f"feature_importance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+
+    # ✅ ADD THIS MISSING SECTION FOR PREDICTIVE MODELING
+    elif analysis_type == "🔮 Predictive Modeling":
+        st.subheader("🔮 Predictive Modeling")
+        
+        numeric_columns = selected_df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(numeric_columns) < 2:
+            st.error("❌ Need at least 2 numeric columns for predictions")
+            return
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            target_column = st.selectbox("🎯 Target Column", numeric_columns)
+        with col2:
+            forecast_periods = st.slider("📅 Forecast Periods", 10, 100, 30)
+        with col3:
+            if st.button("🚀 Generate Predictions"):
+                with st.spinner("🔮 Generating predictions..."):
+                    results, error = analytics.create_predictions(selected_df, target_column, forecast_periods)
+                    
+                    if error:
+                        st.error(f"❌ {error}")
+                    else:
+                        st.session_state.prediction_results = results
+                        st.success("✅ Predictions generated successfully!")
+        
+        # Display prediction results
+        if st.session_state.prediction_results:
+            st.markdown("### 📊 Prediction Results")
+            
+            results = st.session_state.prediction_results
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🎯 Target Column", results['target_column'])
+            with col2:
+                st.metric("🔮 Forecast Periods", results['forecast_periods'])
+            with col3:
+                model_type = results['model_type'].title()
+                st.metric("🤖 Model Type", model_type)
+            
+            # Create and display visualization
+            fig = create_prediction_viz(results)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Prediction insights
+            st.markdown("#### 🔍 Prediction Insights")
+            future_predictions = results['future_predictions']
+            avg_prediction = np.mean(future_predictions)
+            trend = "increasing" if future_predictions[-1] > future_predictions[0] else "decreasing"
+            st.markdown(f"  - **Average Future Value**: {avg_prediction:.2f}")
+            st.markdown(f"  - **Trend Direction**: {trend.title()}")
+            st.markdown(f"  - **Prediction Range**: {min(future_predictions):.2f} to {max(future_predictions):.2f}")
+            
+            # Show prediction summary
+            st.markdown("#### 📋 Prediction Summary")
+            
+            if results['model_type'] == 'regression':
+                train_mse = mean_squared_error(results['train_actual'], results['train_predictions'])
+                test_mse = mean_squared_error(results['test_actual'], results['test_predictions'])
+                
+                summary_data = {
+                    'Metric': ['Train MSE', 'Test MSE', 'Avg Future Prediction'],
+                    'Value': [f"{train_mse:.4f}", f"{test_mse:.4f}", f"{np.mean(results['future_predictions']):.4f}"]
+                }
+            else:
+                train_acc = accuracy_score(results['train_actual'], results['train_predictions'])
+                test_acc = accuracy_score(results['test_actual'], results['test_predictions'])
+                
+                summary_data = {
+                    'Metric': ['Train Accuracy', 'Test Accuracy', 'Most Frequent Prediction'],
+                    'Value': [f"{train_acc:.4f}", f"{test_acc:.4f}", f"{max(set(results['future_predictions']), key=results['future_predictions'].count)}"]
+                }
+            
+            summary_df = pd.DataFrame(summary_data)
+            st.dataframe(summary_df, use_container_width=True)
+            
+            # Download predictions
+            predictions_df = pd.DataFrame({
+                'Period': range(1, len(results['future_predictions']) + 1),
+                'Predicted_Value': results['future_predictions']
+            })
+            
+            predictions_csv = predictions_df.to_csv(index=False)
+            st.download_button(
+                "📥 Download Predictions",
+                data=predictions_csv,
+                file_name=f"predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+    
+    # ML Insights Summary
+    st.markdown("---")
+    st.markdown("### 🎯 ML Insights Summary")
+    
+    insights_completed = []
+    if st.session_state.clustering_results:
+        insights_completed.append("🔍 Clustering Analysis")
+    if st.session_state.feature_importance_results:
+        insights_completed.append("📈 Feature Importance")
+    if st.session_state.prediction_results:
+        insights_completed.append("🔮 Predictive Modeling")
+    
+    if insights_completed:
+        st.success(f"✅ Completed: {', '.join(insights_completed)}")
+        
+        # Generate comprehensive ML report
+        if st.button("📊 Generate ML Analysis Report"):
+            report_sections = []
+            
+            if st.session_state.clustering_results:
+                results = st.session_state.clustering_results
+                report_sections.append(f"""
+CLUSTERING ANALYSIS REPORT
+==========================
+- Number of Clusters: {results['n_clusters']}
+- Silhouette Score: {results['silhouette_score']:.3f}
+- PCA Variance Explained: {sum(results['pca_variance_ratio']):.3f}
+- Dataset Size: {len(results['clustered_data'])} records
+                """)
+            
+            if st.session_state.feature_importance_results:
+                results = st.session_state.feature_importance_results
+                top_features = results['importance_data'].head(5)
+                features_text = "\n".join([f"  - {row['Feature']}: {row['Importance']:.4f}" for _, row in top_features.iterrows()])
+                report_sections.append(f"""
+FEATURE IMPORTANCE ANALYSIS REPORT
+==================================
+- Target Column: {results['target_column']}
+- Model Type: {results['model_type'].title()}
+- Features Analyzed: {len(results['feature_columns'])}
+- Top 5 Important Features:
+{features_text}
+                """)
+            
+            if st.session_state.prediction_results:
+                results = st.session_state.prediction_results
+                avg_prediction = np.mean(results['future_predictions'])
+                report_sections.append(f"""
+PREDICTIVE MODELING REPORT
+==========================
+- Target Column: {results['target_column']}
+- Model Type: {results['model_type'].title()}
+- Forecast Periods: {results['forecast_periods']}
+- Average Future Prediction: {avg_prediction:.4f}
+- Prediction Range: {min(results['future_predictions']):.4f} to {max(results['future_predictions']):.4f}
+                """)
+            
+            full_report = f"""
+COMPREHENSIVE ML ANALYSIS REPORT
+================================
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Dataset: {selected_dataset_name}
+
+{"".join(report_sections)}
+
+ANALYSIS SUMMARY
+================
+Completed Analyses: {', '.join(insights_completed)}
+
+This report was generated by the Marketing Campaign War Room ML Analytics Engine.
+            """
+            
+            st.download_button(
+                "📥 Download ML Analysis Report",
+                data=full_report,
+                file_name=f"ml_analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/plain"
+            )
+    else:
+        st.info("💡 Select an analysis type above to get started with ML insights!")
 
 def generate_campaign_strategy_with_groq(campaign_data):
     """Generate comprehensive campaign strategy using enhanced Groq AI system prompts"""
