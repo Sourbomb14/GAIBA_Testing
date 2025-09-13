@@ -745,7 +745,7 @@ class AdvancedAnalytics:
             return None, f"Prediction error: {str(e)}"
 
 # ================================
-# GROQ AI FUNCTIONS
+# GROQ AI FUNCTIONS - FIXED WITH ENHANCED SYSTEM PROMPTS
 # ================================
 
 def generate_campaign_strategy_with_groq(campaign_data):
@@ -790,7 +790,7 @@ Use emojis, tables, and clear formatting for better readability. Make this pract
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a world-class marketing strategist with 20+ years of experience. Create detailed, actionable marketing campaigns with specific tactics and measurable outcomes."
+                    "content": SYSTEM_PROMPT_CAMPAIGN
                 },
                 {
                     "role": "user",
@@ -836,7 +836,7 @@ Requirements:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert email marketing specialist. Create ONLY clean, ready-to-use email templates without any explanations. Provide ONLY the template content."
+                    "content": SYSTEM_PROMPT_EMAIL
                 },
                 {
                     "role": "user", 
@@ -898,7 +898,7 @@ Format with clear headings and bullet points."""
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert data analyst. Provide thorough, actionable analysis with clear insights and strategic recommendations."
+                    "content": SYSTEM_PROMPT_DATA
                 },
                 {
                     "role": "user",
@@ -2343,7 +2343,7 @@ def show_advanced_analytics_page():
                         use_container_width=True
                     )
     
-        # Email campaign results analysis
+    # Email campaign results analysis
     if st.session_state.campaign_results is not None:
         st.markdown("---")
         st.subheader("📧 Email Campaign Performance Analysis")
@@ -2394,100 +2394,6 @@ def show_advanced_analytics_page():
                 )
                 fig.update_layout(template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
-        
-        # Enhanced campaign performance metrics
-        if total_sent > 0:
-            st.markdown("### 📈 Detailed Campaign Performance")
-            
-            # Time-based analysis
-            results_df['timestamp'] = pd.to_datetime(results_df['timestamp'], format='%H:%M:%S', errors='coerce')
-            
-            # Email sending rate analysis
-            sent_results = results_df[results_df['status'] == 'sent'].copy()
-            if not sent_results.empty:
-                sent_results['minute'] = sent_results['timestamp'].dt.floor('min')
-                sending_rate = sent_results.groupby('minute').size().reset_index(name='emails_per_minute')
-                
-                if len(sending_rate) > 1:
-                    fig = px.line(
-                        sending_rate, 
-                        x='minute', 
-                        y='emails_per_minute',
-                        title="Email Sending Rate Over Time",
-                        markers=True
-                    )
-                    fig.update_layout(template="plotly_dark")
-                    st.plotly_chart(fig, use_container_width=True)
-            
-            # Success rate by email domain
-            domain_success = results_df.groupby(results_df['email'].str.split('@').str[1]).agg({
-                'status': ['count', lambda x: (x == 'sent').sum()]
-            }).round(2)
-            domain_success.columns = ['Total', 'Sent']
-            domain_success['Success_Rate'] = (domain_success['Sent'] / domain_success['Total'] * 100).round(1)
-            domain_success = domain_success.sort_values('Success_Rate', ascending=False).head(10)
-            
-            if not domain_success.empty:
-                st.markdown("#### 🎯 Success Rate by Email Domain")
-                fig = px.bar(
-                    x=domain_success.index,
-                    y=domain_success['Success_Rate'],
-                    title="Success Rate by Email Domain (%)",
-                    color=domain_success['Success_Rate'],
-                    color_continuous_scale='RdYlGn'
-                )
-                fig.update_layout(template="plotly_dark")
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Domain performance table
-                st.dataframe(domain_success, use_container_width=True)
-        
-        # Campaign insights and recommendations
-        st.markdown("### 💡 Campaign Insights & Recommendations")
-        
-        insights = []
-        if success_rate >= 80:
-            insights.append("🎉 **Excellent Performance**: Your campaign achieved outstanding delivery rates!")
-        elif success_rate >= 60:
-            insights.append("✅ **Good Performance**: Solid delivery rates with room for optimization.")
-        else:
-            insights.append("⚠️ **Needs Improvement**: Consider reviewing email list quality and content.")
-        
-        if total_invalid > 0:
-            invalid_rate = (total_invalid / len(results_df)) * 100
-            if invalid_rate > 10:
-                insights.append(f"🔍 **Email List Hygiene**: {invalid_rate:.1f}% invalid emails detected. Consider list cleaning.")
-        
-        if total_failed > 0:
-            failure_rate = (total_failed / len(results_df)) * 100
-            if failure_rate > 5:
-                insights.append(f"🚨 **Delivery Issues**: {failure_rate:.1f}% delivery failures. Check email content and sender reputation.")
-        
-        for insight in insights:
-            st.markdown(insight)
-        
-        with st.expander("📋 View Detailed Email Campaign Results"):
-            st.dataframe(results_df, use_container_width=True)
-        
-        # Export detailed report
-        if st.button("📊 Generate Campaign Report"):
-            report_data = {
-                'Campaign Summary': [
-                    f"Total Emails Sent: {len(results_df)}",
-                    f"Successfully Delivered: {total_sent} ({success_rate:.1f}%)",
-                    f"Failed Deliveries: {total_failed}",
-                    f"Invalid Addresses: {total_invalid}",
-                    f"Campaign Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                ]
-            }
-            
-            report_text = "\n".join(report_data['Campaign Summary'])
-            st.download_button(
-                "📥 Download Campaign Report",
-                data=report_text,
-                file_name=f"campaign_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                mime="text/plain"
-            )
 
 def show_ml_insights_page():
     """Advanced ML insights page with clustering, feature importance, and predictions"""
@@ -2576,22 +2482,6 @@ def show_ml_insights_page():
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Cluster insights
-            st.markdown("#### 🔍 Cluster Insights")
-            for i in range(results['n_clusters']):
-                cluster_data = results['clustered_data'][results['clustered_data']['Cluster'] == i]
-                cluster_size = len(cluster_data)
-                cluster_percentage = (cluster_size / len(results['clustered_data'])) * 100
-                
-                st.markdown(f"**Cluster {i}**: {cluster_size} items ({cluster_percentage:.1f}% of data)")
-                
-                # Show cluster characteristics
-                numeric_cols = cluster_data.select_dtypes(include=[np.number]).columns
-                if len(numeric_cols) > 0:
-                    cluster_stats = cluster_data[numeric_cols].mean()
-                    top_features = cluster_stats.nlargest(3)
-                    st.markdown(f"  - Key characteristics: {', '.join([f'{col}: {val:.2f}' for col, val in top_features.items()])}")
-            
             # Download clustered data
             clustered_csv = results['clustered_data'].to_csv(index=False)
             st.download_button(
@@ -2600,245 +2490,178 @@ def show_ml_insights_page():
                 file_name=f"clustered_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
             )
+
+# ================================
+# GROQ AI FUNCTIONS WITH ENHANCED SYSTEM PROMPTS
+# ================================
+
+def generate_campaign_strategy_with_groq(campaign_data):
+    """Generate comprehensive campaign strategy using enhanced Groq AI system prompts"""
+    if not GROQ_API_KEY:
+        return generate_fallback_strategy(campaign_data)
     
-    elif analysis_type == "📈 Feature Importance":
-        st.subheader("📈 Feature Importance Analysis")
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
         
-        numeric_columns = selected_df.select_dtypes(include=[np.number]).columns.tolist()
+        channels_str = ', '.join(campaign_data.get('channels', ['Email Marketing']))
         
-        if len(numeric_columns) < 2:
-            st.error("❌ Need at least 2 numeric columns for feature importance analysis")
-            return
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            target_column = st.selectbox("🎯 Target Column", numeric_columns)
-        with col2:
-            if st.button("🚀 Calculate Feature Importance"):
-                with st.spinner("📈 Calculating feature importance..."):
-                    results, error = analytics.calculate_feature_importance(selected_df, target_column)
-                    
-                    if error:
-                        st.error(f"❌ {error}")
-                    else:
-                        st.session_state.feature_importance_results = results
-                        st.success("✅ Feature importance analysis completed!")
-        
-        # Display feature importance results
-        if st.session_state.feature_importance_results:
-            st.markdown("### 📊 Feature Importance Results")
-            
-            results = st.session_state.feature_importance_results
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("🎯 Target Column", results['target_column'])
-            with col2:
-                st.metric("📊 Features Analyzed", len(results['feature_columns']))
-            with col3:
-                model_type = results['model_type'].title()
-                st.metric("🤖 Model Type", model_type)
-            
-            # Create and display visualization
-            fig = create_feature_importance_viz(results)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # Feature insights
-            st.markdown("#### 🔍 Feature Insights")
-            importance_data = results['importance_data']
-            top_3_features = importance_data.head(3)
-            
-            st.markdown("**Most Important Features:**")
-            for idx, row in top_3_features.iterrows():
-                importance_pct = row['Importance'] * 100
-                st.markdown(f"  - **{row['Feature']}**: {importance_pct:.1f}% importance")
-            
-            # Show feature importance table
-            st.markdown("#### 📋 Feature Importance Rankings")
-            st.dataframe(results['importance_data'], use_container_width=True)
-            
-            # Download results
-            importance_csv = results['importance_data'].to_csv(index=False)
-            st.download_button(
-                "📥 Download Feature Importance",
-                data=importance_csv,
-                file_name=f"feature_importance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-    
-    elif analysis_type == "🔮 Predictive Modeling":
-        st.subheader("🔮 Predictive Modeling")
-        
-        numeric_columns = selected_df.select_dtypes(include=[np.number]).columns.tolist()
-        
-        if len(numeric_columns) < 2:
-            st.error("❌ Need at least 2 numeric columns for predictions")
-            return
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            target_column = st.selectbox("🎯 Target Column", numeric_columns)
-        with col2:
-            forecast_periods = st.slider("📅 Forecast Periods", 10, 100, 30)
-        with col3:
-            if st.button("🚀 Generate Predictions"):
-                with st.spinner("🔮 Generating predictions..."):
-                    results, error = analytics.create_predictions(selected_df, target_column, forecast_periods)
-                    
-                    if error:
-                        st.error(f"❌ {error}")
-                    else:
-                        st.session_state.prediction_results = results
-                        st.success("✅ Predictions generated successfully!")
-        
-        # Display prediction results
-        if st.session_state.prediction_results:
-            st.markdown("### 📊 Prediction Results")
-            
-            results = st.session_state.prediction_results
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("🎯 Target Column", results['target_column'])
-            with col2:
-                st.metric("🔮 Forecast Periods", results['forecast_periods'])
-            with col3:
-                model_type = results['model_type'].title()
-                st.metric("🤖 Model Type", model_type)
-            
-            # Create and display visualization
-            fig = create_prediction_viz(results)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # Prediction insights
-            st.markdown("#### 🔍 Prediction Insights")
-            future_predictions = results['future_predictions']
-            avg_prediction = np.mean(future_predictions)
-            trend = "increasing" if future_predictions[-1] > future_predictions[0] else "decreasing"
-            
-            st.markdown(f"  - **Average Future Value**: {avg_prediction:.2f}")
-            st.markdown(f"  - **Trend Direction**: {trend.title()}")
-            st.markdown(f"  - **Prediction Range**: {min(future_predictions):.2f} to {max(future_predictions):.2f}")
-            
-            # Show prediction summary
-            st.markdown("#### 📋 Prediction Summary")
-            
-            if results['model_type'] == 'regression':
-                train_mse = mean_squared_error(results['train_actual'], results['train_predictions'])
-                test_mse = mean_squared_error(results['test_actual'], results['test_predictions'])
-                
-                summary_data = {
-                    'Metric': ['Train MSE', 'Test MSE', 'Avg Future Prediction'],
-                    'Value': [f"{train_mse:.4f}", f"{test_mse:.4f}", f"{np.mean(results['future_predictions']):.4f}"]
+        prompt = f"""Create a comprehensive, professional marketing campaign strategy for:
+
+CAMPAIGN DETAILS:
+- Company: {campaign_data.get('company_name', 'Company')}
+- Campaign Type: {campaign_data.get('campaign_type', 'Marketing Campaign')}
+- Target Audience: {campaign_data.get('target_audience', 'General audience')}
+- Geographic Focus: {campaign_data.get('location', 'Global')}
+- Marketing Channels: {channels_str}
+- Budget: {campaign_data.get('budget', 'TBD')} {campaign_data.get('currency', 'USD')}
+- Duration: {campaign_data.get('duration', 'TBD')}
+- Customer Segment: {campaign_data.get('customer_segment', 'Mass Market')}
+- Product/Service: {campaign_data.get('product_description', 'Product/Service')}
+
+Please provide a detailed, actionable strategy with:
+1. Executive Summary with key metrics
+2. Target Audience Analysis with demographics
+3. Competitive Positioning
+4. Messaging Strategy with key themes
+5. Channel-Specific Tactics with implementation details
+6. Content Strategy and calendar
+7. Timeline & Milestones with specific dates
+8. Budget Allocation with detailed breakdown
+9. Success Metrics & KPIs
+10. Risk Management strategies
+11. Next Steps with priority actions
+
+Use emojis, tables, and clear formatting for better readability. Make this practical and actionable."""
+
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT_CAMPAIGN  # Using enhanced system prompt
+                },
+                {
+                    "role": "user",
+                    "content": prompt
                 }
-            else:
-                train_acc = accuracy_score(results['train_actual'], results['train_predictions'])
-                test_acc = accuracy_score(results['test_actual'], results['test_predictions'])
-                
-                summary_data = {
-                    'Metric': ['Train Accuracy', 'Test Accuracy', 'Most Frequent Prediction'],
-                    'Value': [f"{train_acc:.4f}", f"{test_acc:.4f}", f"{max(set(results['future_predictions']), key=results['future_predictions'].count)}"]
-                }
-            
-            summary_df = pd.DataFrame(summary_data)
-            st.dataframe(summary_df, use_container_width=True)
-            
-            # Download predictions
-            predictions_df = pd.DataFrame({
-                'Period': range(1, len(results['future_predictions']) + 1),
-                'Predicted_Value': results['future_predictions']
-            })
-            
-            predictions_csv = predictions_df.to_csv(index=False)
-            st.download_button(
-                "📥 Download Predictions",
-                data=predictions_csv,
-                file_name=f"predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-    
-    # ML Insights Summary
-    st.markdown("---")
-    st.markdown("### 🎯 ML Insights Summary")
-    
-    insights_completed = []
-    if st.session_state.clustering_results:
-        insights_completed.append("🔍 Clustering Analysis")
-    if st.session_state.feature_importance_results:
-        insights_completed.append("📈 Feature Importance")
-    if st.session_state.prediction_results:
-        insights_completed.append("🔮 Predictive Modeling")
-    
-    if insights_completed:
-        st.success(f"✅ Completed: {', '.join(insights_completed)}")
+            ],
+            model=GROQ_MODEL,
+            temperature=0.7,
+            max_tokens=4000
+        )
         
-        # Generate comprehensive ML report
-        if st.button("📊 Generate ML Analysis Report"):
-            report_sections = []
-            
-            if st.session_state.clustering_results:
-                results = st.session_state.clustering_results
-                report_sections.append(f"""
-CLUSTERING ANALYSIS REPORT
-==========================
-- Number of Clusters: {results['n_clusters']}
-- Silhouette Score: {results['silhouette_score']:.3f}
-- PCA Variance Explained: {sum(results['pca_variance_ratio']):.3f}
-- Dataset Size: {len(results['clustered_data'])} records
-                """)
-            
-            if st.session_state.feature_importance_results:
-                results = st.session_state.feature_importance_results
-                top_features = results['importance_data'].head(5)
-                features_text = "\n".join([f"  - {row['Feature']}: {row['Importance']:.4f}" for _, row in top_features.iterrows()])
-                report_sections.append(f"""
-FEATURE IMPORTANCE ANALYSIS REPORT
-==================================
-- Target Column: {results['target_column']}
-- Model Type: {results['model_type'].title()}
-- Features Analyzed: {len(results['feature_columns'])}
-- Top 5 Important Features:
-{features_text}
-                """)
-            
-            if st.session_state.prediction_results:
-                results = st.session_state.prediction_results
-                avg_prediction = np.mean(results['future_predictions'])
-                report_sections.append(f"""
-PREDICTIVE MODELING REPORT
-==========================
-- Target Column: {results['target_column']}
-- Model Type: {results['model_type'].title()}
-- Forecast Periods: {results['forecast_periods']}
-- Average Future Prediction: {avg_prediction:.4f}
-- Prediction Range: {min(results['future_predictions']):.4f} to {max(results['future_predictions']):.4f}
-                """)
-            
-            full_report = f"""
-COMPREHENSIVE ML ANALYSIS REPORT
-================================
-Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Dataset: {selected_dataset_name}
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        st.error(f"Error generating campaign with Groq: {e}")
+        return generate_fallback_strategy(campaign_data)
 
-{"".join(report_sections)}
+def generate_email_template_with_groq(template_type, tone, format_type, campaign_context=None):
+    """Generate clean email templates using enhanced Groq AI system prompts"""
+    if not GROQ_API_KEY:
+        return generate_fallback_email_template(template_type, tone, format_type)
+    
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        context_info = f"Campaign Context: {campaign_context}" if campaign_context else "General marketing campaign"
+        
+        prompt = f"""Create a professional {template_type.lower()} email template with a {tone.lower()} tone.
+Format: {format_type}
+{context_info}
 
-ANALYSIS SUMMARY
-================
-Completed Analyses: {', '.join(insights_completed)}
+Requirements:
+1. Include personalization placeholders: {{{{first_name}}}}, {{{{name}}}}, {{{{email}}}}
+2. Make it engaging and action-oriented
+3. Include a clear call-to-action
+4. Use modern, professional design
+5. Make it mobile-friendly
+6. IMPORTANT: Provide ONLY the clean template content without any explanations or instructions
 
-This report was generated by the Marketing Campaign War Room ML Analytics Engine.
-            """
-            
-            st.download_button(
-                "📥 Download ML Analysis Report",
-                data=full_report,
-                file_name=f"ml_analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                mime="text/plain"
-            )
-    else:
-        st.info("💡 Select an analysis type above to get started with ML insights!")
+{"Generate HTML email with inline CSS styling - ONLY the HTML code" if format_type == "HTML" else "Generate plain text email with proper formatting - ONLY the email text"}"""
+
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT_EMAIL  # Using enhanced system prompt
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            model=GROQ_MODEL,
+            temperature=0.8,
+            max_tokens=2000
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        st.error(f"Error generating email template: {e}")
+        return generate_fallback_email_template(template_type, tone, format_type)
+
+def analyze_data_with_groq(df, file_info):
+    """Analyze uploaded data using enhanced Groq AI system prompts"""
+    if not GROQ_API_KEY:
+        return "Groq AI not available for data analysis. Please configure API key."
+    
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        # Safe JSON serialization
+        def safe_json_serializable(o):
+            if isinstance(o, (pd.Timestamp, pd.Timedelta)):
+                return str(o)
+            elif pd.isna(o):
+                return None
+            raise TypeError(f"Type {type(o)} not serializable")
+        
+        sample_data = df.head(5).to_dict(orient='records')
+        
+        prompt = f"""You are a professional data analyst. Analyze this dataset:
+
+FILE INFO: {file_info}
+DATASET SHAPE: {df.shape[0]} rows, {df.shape[1]} columns
+COLUMNS: {list(df.columns)}
+SAMPLE DATA (first 5 rows):
+{json.dumps(sample_data, indent=2, default=safe_json_serializable)}
+
+Please provide a comprehensive analysis including:
+
+1. **DATA SUMMARY & STATISTICS**
+2. **KEY INSIGHTS & TRENDS** 
+3. **RECOMMENDED VISUALIZATIONS**
+   - Suggest specific chart types
+   - Recommend columns to visualize together
+4. **DATA QUALITY ASSESSMENT**
+5. **BUSINESS RECOMMENDATIONS**
+   - Actionable insights for management
+   - Strategic recommendations
+
+Format with clear headings and bullet points."""
+
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT_DATA  # Using enhanced system prompt
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            model=GROQ_MODEL,
+            temperature=0.3,
+            max_tokens=3000
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        st.error(f"Error analyzing data: {e}")
+        return f"Error analyzing data: {str(e)}"
 
 # ================================
 # MAIN EXECUTION
